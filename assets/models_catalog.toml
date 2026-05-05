@@ -1,0 +1,50 @@
+# Built-in model catalog.
+#
+# Mirrors the model list shown in the handy UI. Names and URLs are placeholders
+# at the skeleton stage -- one entry per family. Real URLs and sha256 hashes
+# are filled in when wiring up the actual transcribe-rs integration.
+
+[[model]]
+name = "whisper-large-v3-turbo-q5_0"
+family = "whisper"
+filename = "ggml-large-v3-turbo-q5_0.bin"
+url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin"
+size_bytes = 0           # TODO: fill in
+sha256 = ""              # TODO: fill in
+description = "Whisper Large v3 Turbo, quantized (CPU)"
+
+[[model]]
+name = "whisper-medium-q5_0"
+family = "whisper"
+filename = "ggml-medium-q5_0.bin"
+url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium-q5_0.bin"
+size_bytes = 0
+sha256 = ""
+description = "Whisper Medium, quantized (CPU)"
+
+[[model]]
+name = "whisper-small-q5_1"
+family = "whisper"
+filename = "ggml-small-q5_1.bin"
+url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin"
+size_bytes = 0
+sha256 = ""
+description = "Whisper Small, quantized (CPU)"
+
+[[model]]
+name = "parakeet-v3"
+family = "parakeet"
+filename = "parakeet-v3.onnx"  # TODO: confirm exact filename/bundle from transcribe-rs
+url = ""                       # TODO: fill in from handy catalog
+size_bytes = 0
+sha256 = ""
+description = "Parakeet V3 (ONNX, CPU)"
+
+[[model]]
+name = "gigaam"
+family = "giga-am"
+filename = "gigaam.onnx"       # TODO: confirm
+url = ""                       # TODO: fill in
+size_bytes = 0
+sha256 = ""
+description = "GigaAM (ONNX, CPU)"

@@ -1,0 +1,53 @@
+[package]
+name = "notes-capture"
+version = "0.0.1"
+edition = "2021"
+description = "CLI transcription tool over transcribe-rs (Whisper / Parakeet / GigaAM, GGUF, CPU)"
+license = "MIT"
+default-run = "notes-capture"
+
+[[bin]]
+name = "notes-capture"
+path = "src/main.rs"
+
+[lib]
+name = "notes_capture"
+path = "src/lib.rs"
+
+[features]
+# Skeleton compiles by default without heavy native deps.
+# Enable real implementations as modules get filled in.
+default = []
+engine-transcribe = ["dep:transcribe-rs"]
+decode-symphonia = ["dep:symphonia", "dep:rubato"]
+download = ["dep:reqwest", "dep:tokio", "dep:futures-util"]
+full = ["engine-transcribe", "decode-symphonia", "download"]
+
+[dependencies]
+anyhow = "1"
+thiserror = "1"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+sha2 = "0.10"
+hex = "0.4"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+async-trait = "0.1"
+
+# Engine (handy uses the same crate; CPU path on Linux).
+transcribe-rs = { version = "0.3.8", features = ["whisper-cpp", "onnx"], optional = true }
+
+# Audio decoding (pure-Rust, no system ffmpeg).
+symphonia = { version = "0.5", features = ["all"], optional = true }
+rubato = { version = "0.16", optional = true }
+
+# Model downloads.
+reqwest = { version = "0.12", features = ["stream", "rustls-tls"], default-features = false, optional = true }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "io-util"], optional = true }
+futures-util = { version = "0.3", optional = true }
+
+[profile.release]
+lto = true
+codegen-units = 1
