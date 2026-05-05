@@ -161,18 +161,20 @@ impl Manager {
             if entry.is_directory {
                 if !local.is_dir() {
                     return Err(Error::Model(format!(
-                        "model `{}` not present at {} -- run `notes-capture models pull {}` first",
+                        "model `{}` not present at {} -- run `{} models pull {}` first",
                         entry.name,
                         local.display(),
+                        env!("CARGO_PKG_NAME"),
                         entry.name
                     )));
                 }
             } else {
                 if !local.is_file() {
                     return Err(Error::Model(format!(
-                        "model `{}` not present at {} -- run `notes-capture models pull {}` first",
+                        "model `{}` not present at {} -- run `{} models pull {}` first",
                         entry.name,
                         local.display(),
+                        env!("CARGO_PKG_NAME"),
                         entry.name
                     )));
                 }
@@ -528,7 +530,7 @@ async fn download_to_path(
     use tokio::io::AsyncWriteExt;
 
     let client = reqwest::Client::builder()
-        .user_agent(concat!("notes-capture/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")))
         .build()
         .map_err(|e| Error::Model(format!("http client: {e}")))?;
 

@@ -4,16 +4,6 @@ version = "0.0.1"
 edition = "2021"
 description = "CLI transcription tool over transcribe-rs (Whisper / Parakeet / GigaAM, GGUF, CPU)"
 license = "MIT"
-default-run = "notes-capture"
-
-[[bin]]
-name = "notes-capture"
-path = "src/main.rs"
-
-[lib]
-name = "notes_capture"
-path = "src/lib.rs"
-
 [features]
 # Default: model download is on (lightweight, no native build deps).
 # Heavy native modules (engine, decode) stay opt-in until implemented.

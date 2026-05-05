@@ -1,5 +1,5 @@
 # Built-in model catalog -- one model per family as a starter set.
-# Users can add more models via `notes-capture models add <url> --family <family>`.
+# Users can add more models via `<binary> models add <url> --family <family>`.
 
 # ---------- Whisper ----------
 

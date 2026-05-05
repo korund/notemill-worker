@@ -21,7 +21,7 @@ impl From<FamilyArg> for ModelFamily {
 }
 
 #[derive(Debug, Parser)]
-#[command(name = "notes-capture", about = "Audio file transcription via transcribe-rs (Whisper / Parakeet / GigaAM, CPU)")]
+#[command(name = env!("CARGO_PKG_NAME"), about = env!("CARGO_PKG_DESCRIPTION"))]
 pub struct Cli {
     /// Models directory. Defaults to ./models, overridden by $NOTES_CAPTURE_MODELS_DIR.
     #[arg(long, global = true, env = "NOTES_CAPTURE_MODELS_DIR")]
