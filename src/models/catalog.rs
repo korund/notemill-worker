@@ -14,11 +14,16 @@ pub struct Catalog {
 pub struct CatalogEntry {
     pub name: String,
     pub family: ModelFamily,
+    /// File name (Whisper) or directory name (Parakeet/GigaAM) inside the models directory.
     pub filename: String,
     pub url: String,
     pub sha256: Option<String>,
     pub size_bytes: Option<u64>,
     pub description: Option<String>,
+    /// true -- URL points to a tar.gz to be extracted into the `filename` directory.
+    /// false -- URL points to a ready-made file (e.g., GGML .bin).
+    #[serde(default)]
+    pub is_directory: bool,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]

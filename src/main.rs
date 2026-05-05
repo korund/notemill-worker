@@ -24,10 +24,11 @@ fn main() -> Result<()> {
         },
         Command::Run {
             model,
+            family,
             input: input_path,
             output: output_path,
         } => {
-            let model_handle = manager.resolve(&model)?;
+            let model_handle = manager.resolve(&model, family.map(Into::into))?;
 
             let source: Box<dyn input::AudioSource> =
                 Box::new(input::LocalFileSource::new(input_path));

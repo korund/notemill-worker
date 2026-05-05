@@ -1,50 +1,91 @@
-# Built-in model catalog.
+# Built-in model catalog -- selected entries from the official handy
+# (src-tauri/src/managers/model.rs, blob.handy.computer).
 #
-# Mirrors the model list shown in the handy UI. Names and URLs are placeholders
-# at the skeleton stage -- one entry per family. Real URLs and sha256 hashes
-# are filled in when wiring up the actual transcribe-rs integration.
+# Three families are included: Whisper, Parakeet, GigaAM.
+# Other handy engines (Moonshine, SenseVoice, Canary, Cohere) are not included.
+
+# ---------- Whisper (whisper.cpp, GGML, single .bin file) ----------
 
 [[model]]
-name = "whisper-large-v3-turbo-q5_0"
+name = "whisper-small"
 family = "whisper"
-filename = "ggml-large-v3-turbo-q5_0.bin"
-url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin"
-size_bytes = 0           # TODO: fill in
-sha256 = ""              # TODO: fill in
-description = "Whisper Large v3 Turbo, quantized (CPU)"
+filename = "ggml-small.bin"
+url = "https://blob.handy.computer/ggml-small.bin"
+sha256 = "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b"
+size_bytes = 487_653_376
+description = "Whisper Small. Fast and fairly accurate."
+is_directory = false
 
 [[model]]
-name = "whisper-medium-q5_0"
+name = "whisper-medium"
 family = "whisper"
-filename = "ggml-medium-q5_0.bin"
-url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium-q5_0.bin"
-size_bytes = 0
-sha256 = ""
-description = "Whisper Medium, quantized (CPU)"
+filename = "whisper-medium-q4_1.bin"
+url = "https://blob.handy.computer/whisper-medium-q4_1.bin"
+sha256 = "79283fc1f9fe12ca3248543fbd54b73292164d8df5a16e095e2bceeaaabddf57"
+size_bytes = 491_782_144
+description = "Whisper Medium (q4_1). Good accuracy, medium speed."
+is_directory = false
 
 [[model]]
-name = "whisper-small-q5_1"
+name = "whisper-turbo"
 family = "whisper"
-filename = "ggml-small-q5_1.bin"
-url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin"
-size_bytes = 0
-sha256 = ""
-description = "Whisper Small, quantized (CPU)"
+filename = "ggml-large-v3-turbo.bin"
+url = "https://blob.handy.computer/ggml-large-v3-turbo.bin"
+sha256 = "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69"
+size_bytes = 1_624_244_224
+description = "Whisper Large v3 Turbo. Balanced accuracy and speed (no translation)."
+is_directory = false
+
+[[model]]
+name = "whisper-large"
+family = "whisper"
+filename = "ggml-large-v3-q5_0.bin"
+url = "https://blob.handy.computer/ggml-large-v3-q5_0.bin"
+sha256 = "d75795ecff3f83b5faa89d1900604ad8c780abd5739fae406de19f23ecd98ad1"
+size_bytes = 1_081_081_856
+description = "Whisper Large v3 (q5_0). High accuracy, slow."
+is_directory = false
+
+[[model]]
+name = "breeze-asr"
+family = "whisper"
+filename = "breeze-asr-q5_k.bin"
+url = "https://blob.handy.computer/breeze-asr-q5_k.bin"
+sha256 = "8efbf0ce8a3f50fe332b7617da787fb81354b358c288b008d3bdef8359df64c6"
+size_bytes = 1_080_033_280
+description = "Breeze ASR (q5_K). Optimized for Taiwanese Mandarin, code-switching."
+is_directory = false
+
+# ---------- Parakeet (NVIDIA NeMo, ONNX, tar.gz of a directory) ----------
+
+[[model]]
+name = "parakeet-v2"
+family = "parakeet"
+filename = "parakeet-tdt-0.6b-v2-int8"
+url = "https://blob.handy.computer/parakeet-v2-int8.tar.gz"
+sha256 = "ac9b9429984dd565b25097337a887bb7f0f8ac393573661c651f0e7d31563991"
+size_bytes = 472_907_776
+description = "Parakeet V2 (int8). English only."
+is_directory = true
 
 [[model]]
 name = "parakeet-v3"
 family = "parakeet"
-filename = "parakeet-v3.onnx"  # TODO: confirm exact filename/bundle from transcribe-rs
-url = ""                       # TODO: fill in from handy catalog
-size_bytes = 0
-sha256 = ""
-description = "Parakeet V3 (ONNX, CPU)"
+filename = "parakeet-tdt-0.6b-v3-int8"
+url = "https://blob.handy.computer/parakeet-v3-int8.tar.gz"
+sha256 = "43d37191602727524a7d8c6da0eef11c4ba24320f5b4730f1a2497befc2efa77"
+size_bytes = 478_150_656
+description = "Parakeet V3 (int8). 25 European languages incl. Russian."
+is_directory = true
+
+# ---------- GigaAM (Sber, ONNX, tar.gz) ----------
 
 [[model]]
-name = "gigaam"
+name = "gigaam-v3"
 family = "giga-am"
-filename = "gigaam.onnx"       # TODO: confirm
-url = ""                       # TODO: fill in
-size_bytes = 0
-sha256 = ""
-description = "GigaAM (ONNX, CPU)"
+filename = "giga-am-v3-int8"
+url = "https://blob.handy.computer/giga-am-v3-int8.tar.gz"
+sha256 = "d872462268430db140b69b72e0fc4b787b194c1dbe51b58de39444d55b6da45b"
+size_bytes = 158_334_976
+description = "GigaAM v3 (int8). Russian speech recognition."
+is_directory = true

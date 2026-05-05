@@ -1,5 +1,24 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
+
+use crate::models::ModelFamily;
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum FamilyArg {
+    Whisper,
+    Parakeet,
+    GigaAm,
+}
+
+impl From<FamilyArg> for ModelFamily {
+    fn from(v: FamilyArg) -> Self {
+        match v {
+            FamilyArg::Whisper => ModelFamily::Whisper,
+            FamilyArg::Parakeet => ModelFamily::Parakeet,
+            FamilyArg::GigaAm => ModelFamily::GigaAm,
+        }
+    }
+}
 
 #[derive(Debug, Parser)]
 #[command(name = "notes-capture", about = "Audio file transcription via transcribe-rs (Whisper / Parakeet / GigaAM, CPU)")]
@@ -33,6 +52,11 @@ pub enum Command {
         /// Model name from the built-in catalog OR path to a model file.
         #[arg(long)]
         model: String,
+
+        /// Engine family for a direct path (`--model <path>`). Not required and ignored
+        /// when a catalog name is used.
+        #[arg(long, value_enum)]
+        family: Option<FamilyArg>,
 
         /// Path to the input audio file.
         #[arg(long)]

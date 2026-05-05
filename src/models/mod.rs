@@ -12,5 +12,5 @@
 mod catalog;
 mod manager;
 
-pub use catalog::{Catalog, CatalogEntry};
+pub use catalog::{Catalog, CatalogEntry, ModelFamily};
 pub use manager::{Manager, ResolvedModel};
