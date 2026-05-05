@@ -1,0 +1,20 @@
+/target
+**/*.rs.bk
+Cargo.lock.bak
+
+# Local model cache (must never be committed)
+/models/*
+!/models/.gitkeep
+
+# Editor / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Environment
+
+/.idea/
+/notes-capture.iml
+/.claude/
+/.SynologyWorkingDirectory/
