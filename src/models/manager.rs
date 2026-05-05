@@ -1,6 +1,5 @@
 use std::path::{Path, PathBuf};
 
-use crate::engine::EngineKind;
 use crate::{Error, Result};
 
 use super::catalog::{Catalog, CatalogEntry, ModelFamily};
@@ -10,7 +9,7 @@ use super::catalog::{Catalog, CatalogEntry, ModelFamily};
 pub struct ResolvedModel {
     pub name: String,
     pub path: PathBuf,
-    pub engine_kind: EngineKind,
+    pub family: ModelFamily,
     pub is_directory: bool,
 }
 
@@ -151,7 +150,7 @@ impl Manager {
                     .map(|s| s.to_string_lossy().into_owned())
                     .unwrap_or_else(|| model_arg.to_string()),
                 path: direct.to_path_buf(),
-                engine_kind: family.engine_kind(),
+                family,
                 is_directory: is_dir,
             });
         }
@@ -190,7 +189,7 @@ impl Manager {
             return Ok(ResolvedModel {
                 name: entry.name.clone(),
                 path: local,
-                engine_kind: entry.family.engine_kind(),
+                family: entry.family,
                 is_directory: entry.is_directory,
             });
         }

@@ -2,7 +2,6 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::engine::EngineKind;
 use crate::{Error, Result};
 
 #[derive(Debug, Clone)]
@@ -34,15 +33,6 @@ pub enum ModelFamily {
     GigaAm,
 }
 
-impl ModelFamily {
-    pub fn engine_kind(self) -> EngineKind {
-        match self {
-            ModelFamily::Whisper => EngineKind::Whisper,
-            ModelFamily::Parakeet => EngineKind::Parakeet,
-            ModelFamily::GigaAm => EngineKind::GigaAm,
-        }
-    }
-}
 
 #[derive(Debug, Deserialize, Serialize)]
 struct CatalogFile {

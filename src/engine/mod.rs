@@ -1,46 +1,78 @@
-//! Transcription via `transcribe-rs` (same engine as handy).
-//!
-//! Supported model families: Whisper (whisper.cpp, GGUF) and
-//! Parakeet/GigaAM (ONNX via the same wrapper). All on CPU.
-//!
-//! Current state: trait + factory stub. Real integration is enabled via feature `engine-transcribe`.
-
 use crate::decode::Pcm16kMono;
 use crate::models::ResolvedModel;
+#[cfg(feature = "engine-transcribe")]
+use crate::models::ModelFamily;
 use crate::{Error, Result};
 
 pub trait Transcriber {
     fn transcribe(&mut self, pcm: &Pcm16kMono) -> Result<String>;
 }
 
-/// Engine family inferred from model metadata or an explicit flag.
-#[derive(Debug, Clone, Copy)]
-pub enum EngineKind {
-    Whisper,
-    Parakeet,
-    GigaAm,
-}
-
-/// Build a concrete engine for the selected model.
 pub fn build(model: &ResolvedModel) -> Result<Box<dyn Transcriber>> {
-    let kind = model.engine_kind;
     #[cfg(not(feature = "engine-transcribe"))]
     {
-        let _ = kind;
         let _ = model;
-        Err(Error::NotImplemented(
+        return Err(Error::NotImplemented(
             "engine: enable feature `engine-transcribe` to use transcribe-rs",
-        ))
+        ));
     }
 
     #[cfg(feature = "engine-transcribe")]
     {
-        let _ = kind;
-        let _ = model;
-        // TODO: instantiate transcribe_rs::WhisperEngine / ParakeetEngine,
-        // load model from model.path, pass params (language, threads, etc.).
-        Err(Error::Engine(
-            "transcribe-rs adapter is wired up but not yet implemented".into(),
-        ))
+        use transcribe_rs::SpeechModel;
+
+        let boxed: Box<dyn SpeechModel> = match model.family {
+            ModelFamily::Whisper => {
+                let engine = transcribe_rs::whisper_cpp::WhisperEngine::load(&model.path)
+                    .map_err(|e| Error::Engine(format!("whisper load: {e}")))?;
+                Box::new(engine)
+            }
+            ModelFamily::Parakeet => {
+                let q = detect_quantization(&model.path);
+                let engine = transcribe_rs::onnx::parakeet::ParakeetModel::load(&model.path, &q)
+                    .map_err(|e| Error::Engine(format!("parakeet load: {e}")))?;
+                Box::new(engine)
+            }
+            ModelFamily::GigaAm => {
+                let q = detect_quantization(&model.path);
+                let engine = transcribe_rs::onnx::gigaam::GigaAMModel::load(&model.path, &q)
+                    .map_err(|e| Error::Engine(format!("gigaam load: {e}")))?;
+                Box::new(engine)
+            }
+        };
+
+        Ok(Box::new(TranscribeRsAdapter { inner: boxed }))
+    }
+}
+
+#[cfg(feature = "engine-transcribe")]
+fn detect_quantization(dir: &std::path::Path) -> transcribe_rs::onnx::Quantization {
+    use transcribe_rs::onnx::Quantization;
+    for (suffix, q) in [
+        ("int4", Quantization::Int4),
+        ("int8", Quantization::Int8),
+        ("fp16", Quantization::FP16),
+    ] {
+        if dir.join(format!("model.{suffix}.onnx")).exists() {
+            return q;
+        }
+    }
+    Quantization::FP32
+}
+
+#[cfg(feature = "engine-transcribe")]
+struct TranscribeRsAdapter {
+    inner: Box<dyn transcribe_rs::SpeechModel>,
+}
+
+#[cfg(feature = "engine-transcribe")]
+impl Transcriber for TranscribeRsAdapter {
+    fn transcribe(&mut self, pcm: &Pcm16kMono) -> Result<String> {
+        let opts = transcribe_rs::TranscribeOptions::default();
+        let result = self
+            .inner
+            .transcribe(&pcm.samples, &opts)
+            .map_err(|e| Error::Engine(format!("transcribe: {e}")))?;
+        Ok(result.text)
     }
 }
