@@ -1,20 +1,7 @@
-# Built-in model catalog -- selected entries from the official handy
-# (src-tauri/src/managers/model.rs, blob.handy.computer).
-#
-# Three families are included: Whisper, Parakeet, GigaAM.
-# Other handy engines (Moonshine, SenseVoice, Canary, Cohere) are not included.
+# Built-in model catalog -- one model per family as a starter set.
+# Users can add more models via `notes-capture models add <url> --family <family>`.
 
-# ---------- Whisper (whisper.cpp, GGML, single .bin file) ----------
-
-[[model]]
-name = "whisper-small"
-family = "whisper"
-filename = "ggml-small.bin"
-url = "https://blob.handy.computer/ggml-small.bin"
-sha256 = "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b"
-size_bytes = 487_653_376
-description = "Whisper Small. Fast and fairly accurate."
-is_directory = false
+# ---------- Whisper ----------
 
 [[model]]
 name = "whisper-medium"
@@ -26,47 +13,7 @@ size_bytes = 491_782_144
 description = "Whisper Medium (q4_1). Good accuracy, medium speed."
 is_directory = false
 
-[[model]]
-name = "whisper-turbo"
-family = "whisper"
-filename = "ggml-large-v3-turbo.bin"
-url = "https://blob.handy.computer/ggml-large-v3-turbo.bin"
-sha256 = "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69"
-size_bytes = 1_624_244_224
-description = "Whisper Large v3 Turbo. Balanced accuracy and speed (no translation)."
-is_directory = false
-
-[[model]]
-name = "whisper-large"
-family = "whisper"
-filename = "ggml-large-v3-q5_0.bin"
-url = "https://blob.handy.computer/ggml-large-v3-q5_0.bin"
-sha256 = "d75795ecff3f83b5faa89d1900604ad8c780abd5739fae406de19f23ecd98ad1"
-size_bytes = 1_081_081_856
-description = "Whisper Large v3 (q5_0). High accuracy, slow."
-is_directory = false
-
-[[model]]
-name = "breeze-asr"
-family = "whisper"
-filename = "breeze-asr-q5_k.bin"
-url = "https://blob.handy.computer/breeze-asr-q5_k.bin"
-sha256 = "8efbf0ce8a3f50fe332b7617da787fb81354b358c288b008d3bdef8359df64c6"
-size_bytes = 1_080_033_280
-description = "Breeze ASR (q5_K). Optimized for Taiwanese Mandarin, code-switching."
-is_directory = false
-
-# ---------- Parakeet (NVIDIA NeMo, ONNX, tar.gz of a directory) ----------
-
-[[model]]
-name = "parakeet-v2"
-family = "parakeet"
-filename = "parakeet-tdt-0.6b-v2-int8"
-url = "https://blob.handy.computer/parakeet-v2-int8.tar.gz"
-sha256 = "ac9b9429984dd565b25097337a887bb7f0f8ac393573661c651f0e7d31563991"
-size_bytes = 472_907_776
-description = "Parakeet V2 (int8). English only."
-is_directory = true
+# ---------- Parakeet ----------
 
 [[model]]
 name = "parakeet-v3"
@@ -78,7 +25,7 @@ size_bytes = 478_150_656
 description = "Parakeet V3 (int8). 25 European languages incl. Russian."
 is_directory = true
 
-# ---------- GigaAM (Sber, ONNX, tar.gz) ----------
+# ---------- GigaAM ----------
 
 [[model]]
 name = "gigaam-v3"

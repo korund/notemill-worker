@@ -1,32 +1,32 @@
-use serde::Deserialize;
+use std::path::Path;
+
+use serde::{Deserialize, Serialize};
 
 use crate::engine::EngineKind;
 use crate::{Error, Result};
 
-/// Built-in model catalog. Format: TOML, embedded from
-/// `assets/models_catalog.toml` via `include_str!`.
 #[derive(Debug, Clone)]
 pub struct Catalog {
     entries: Vec<CatalogEntry>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CatalogEntry {
     pub name: String,
     pub family: ModelFamily,
-    /// File name (Whisper) or directory name (Parakeet/GigaAM) inside the models directory.
     pub filename: String,
     pub url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub sha256: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub size_bytes: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    /// true -- URL points to a tar.gz to be extracted into the `filename` directory.
-    /// false -- URL points to a ready-made file (e.g., GGML .bin).
     #[serde(default)]
     pub is_directory: bool,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ModelFamily {
     Whisper,
@@ -44,21 +44,44 @@ impl ModelFamily {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct CatalogFile {
     #[serde(rename = "model", default)]
     models: Vec<CatalogEntry>,
 }
 
 const EMBEDDED: &str = include_str!("../../assets/models_catalog.toml");
+const CATALOG_FILENAME: &str = "models_catalog.toml";
 
 impl Catalog {
-    pub fn embedded() -> Result<Self> {
-        let parsed: CatalogFile = toml::from_str(EMBEDDED)
-            .map_err(|e| Error::Config(format!("models catalog: {e}")))?;
-        Ok(Self {
-            entries: parsed.models,
-        })
+    /// Load catalog: embedded entries as base, merged with external file
+    /// (`<models_dir>/models_catalog.toml`) if it exists. External entries
+    /// override embedded ones by name.
+    pub fn load(models_dir: &Path) -> Result<Self> {
+        let mut entries = Self::parse_toml(EMBEDDED, "embedded catalog")?;
+
+        let external_path = models_dir.join(CATALOG_FILENAME);
+        if external_path.is_file() {
+            let content = std::fs::read_to_string(&external_path)
+                .map_err(|e| Error::Config(format!("read {}: {e}", external_path.display())))?;
+            let external = Self::parse_toml(&content, &external_path.display().to_string())?;
+
+            for ext in external {
+                if let Some(pos) = entries.iter().position(|e| e.name == ext.name) {
+                    entries[pos] = ext;
+                } else {
+                    entries.push(ext);
+                }
+            }
+        }
+
+        Ok(Self { entries })
+    }
+
+    fn parse_toml(src: &str, label: &str) -> Result<Vec<CatalogEntry>> {
+        let parsed: CatalogFile =
+            toml::from_str(src).map_err(|e| Error::Config(format!("{label}: {e}")))?;
+        Ok(parsed.models)
     }
 
     pub fn entries(&self) -> &[CatalogEntry] {
@@ -67,5 +90,33 @@ impl Catalog {
 
     pub fn find(&self, name: &str) -> Option<&CatalogEntry> {
         self.entries.iter().find(|e| e.name == name)
+    }
+
+    /// Append (or replace by name) an entry in the external catalog file.
+    /// Creates the file if it does not exist yet.
+    pub fn append_to_file(models_dir: &Path, entry: &CatalogEntry) -> Result<()> {
+        let path = models_dir.join(CATALOG_FILENAME);
+
+        let mut external = if path.is_file() {
+            let content = std::fs::read_to_string(&path)
+                .map_err(|e| Error::Config(format!("read {}: {e}", path.display())))?;
+            Self::parse_toml(&content, &path.display().to_string())?
+        } else {
+            Vec::new()
+        };
+
+        if let Some(pos) = external.iter().position(|e| e.name == entry.name) {
+            external[pos] = entry.clone();
+        } else {
+            external.push(entry.clone());
+        }
+
+        let file = CatalogFile { models: external };
+        let content = toml::to_string_pretty(&file)
+            .map_err(|e| Error::Config(format!("serialize catalog: {e}")))?;
+        std::fs::write(&path, content)
+            .map_err(|e| Error::Config(format!("write {}: {e}", path.display())))?;
+
+        Ok(())
     }
 }

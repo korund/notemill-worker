@@ -41,7 +41,7 @@ impl Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    /// Model management: list / pull.
+    /// Model management: list / pull / add.
     Models {
         #[command(subcommand)]
         cmd: ModelsCommand,
@@ -70,11 +70,24 @@ pub enum Command {
 
 #[derive(Debug, Subcommand)]
 pub enum ModelsCommand {
-    /// Show the built-in catalog and files physically present in the models directory.
+    /// Show the catalog and files physically present in the models directory.
     List,
-    /// Download a model by name from the built-in catalog into the models directory.
+    /// Download a model by name from the catalog into the models directory.
     Pull {
         /// Model name (see `models list`).
         name: String,
+    },
+    /// Add a model by URL: download, compute sha256/size, register in catalog.
+    Add {
+        /// Download URL of the model file or .tar.gz archive.
+        url: String,
+
+        /// Engine family (whisper, parakeet, giga-am).
+        #[arg(long, value_enum)]
+        family: FamilyArg,
+
+        /// Override the auto-derived model name.
+        #[arg(long)]
+        name: Option<String>,
     },
 }

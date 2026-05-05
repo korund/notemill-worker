@@ -12,7 +12,8 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     let models_dir = cli.models_dir();
-    let manager = models::Manager::new(models_dir, models::Catalog::embedded()?);
+    let catalog = models::Catalog::load(&models_dir)?;
+    let manager = models::Manager::new(models_dir, catalog);
 
     match cli.command {
         Command::Models { cmd } => match cmd {
@@ -21,6 +22,9 @@ fn main() -> Result<()> {
                 Ok(())
             }
             ModelsCommand::Pull { name } => manager.pull(&name),
+            ModelsCommand::Add { url, family, name } => {
+                manager.add(&url, family.into(), name.as_deref())
+            }
         },
         Command::Run {
             model,

@@ -197,6 +197,159 @@ impl Manager {
             "`{model_arg}` is neither a known catalog name nor an existing path"
         )))
     }
+
+    /// Download a model from a URL, compute sha256/size, and register it in the
+    /// external catalog file. Family must be specified; name is derived from the
+    /// URL filename unless overridden.
+    pub fn add(
+        &self,
+        url: &str,
+        family: ModelFamily,
+        name_override: Option<&str>,
+    ) -> Result<()> {
+        let url_path = url.split('?').next().unwrap_or(url);
+        let url_filename = url_path
+            .rsplit('/')
+            .next()
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| Error::Model("cannot determine filename from URL".into()))?;
+
+        let is_directory =
+            url_filename.ends_with(".tar.gz") || url_filename.ends_with(".tgz");
+
+        let filename = if is_directory {
+            url_filename
+                .strip_suffix(".tar.gz")
+                .or_else(|| url_filename.strip_suffix(".tgz"))
+                .unwrap_or(url_filename)
+                .to_string()
+        } else {
+            url_filename.to_string()
+        };
+
+        let name = name_override
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| derive_name(&filename));
+
+        if self.catalog.find(&name).is_some() {
+            return Err(Error::Model(format!(
+                "model `{name}` already exists in catalog"
+            )));
+        }
+
+        std::fs::create_dir_all(&self.dir)
+            .map_err(|e| Error::Model(format!("create models dir: {e}")))?;
+
+        let (sha256, size_bytes) =
+            add_download(url, &name, is_directory, &filename, &self.dir)?;
+
+        let entry = CatalogEntry {
+            name: name.clone(),
+            family,
+            filename,
+            url: url.to_string(),
+            sha256: Some(sha256),
+            size_bytes: Some(size_bytes),
+            description: None,
+            is_directory,
+        };
+
+        Catalog::append_to_file(&self.dir, &entry)?;
+        println!("Added `{name}` to catalog");
+        Ok(())
+    }
+}
+
+fn derive_name(filename: &str) -> String {
+    filename
+        .strip_suffix(".bin")
+        .or_else(|| filename.strip_suffix(".gguf"))
+        .unwrap_or(filename)
+        .to_string()
+}
+
+fn compute_sha256(path: &Path) -> Result<String> {
+    use sha2::{Digest, Sha256};
+    use std::io::Read;
+
+    let mut file = std::fs::File::open(path)
+        .map_err(|e| Error::Model(format!("open {} for hashing: {e}", path.display())))?;
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 64 * 1024];
+    loop {
+        let n = file
+            .read(&mut buf)
+            .map_err(|e| Error::Model(format!("read {} for hashing: {e}", path.display())))?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Ok(hex::encode(hasher.finalize()))
+}
+
+#[cfg(not(feature = "download"))]
+fn add_download(
+    _url: &str,
+    _name: &str,
+    _is_directory: bool,
+    _filename: &str,
+    _models_dir: &Path,
+) -> Result<(String, u64)> {
+    Err(Error::NotImplemented(
+        "download: enable feature `download` to add models by URL",
+    ))
+}
+
+#[cfg(feature = "download")]
+fn add_download(
+    url: &str,
+    name: &str,
+    is_directory: bool,
+    filename: &str,
+    models_dir: &Path,
+) -> Result<(String, u64)> {
+    let download_path = if is_directory {
+        models_dir.join(format!("{filename}.tar.gz.part"))
+    } else {
+        models_dir.join(filename)
+    };
+
+    let tmp_entry = CatalogEntry {
+        name: name.to_string(),
+        family: ModelFamily::Whisper, // unused for download, just a placeholder
+        filename: filename.to_string(),
+        url: url.to_string(),
+        sha256: None,
+        size_bytes: None,
+        description: None,
+        is_directory: false, // download as a single file first
+    };
+    download_file(&tmp_entry, &download_path)?;
+
+    let size_bytes = std::fs::metadata(&download_path)
+        .map_err(|e| Error::Model(format!("stat {}: {e}", download_path.display())))?
+        .len();
+    let sha256 = compute_sha256(&download_path)?;
+
+    if is_directory {
+        let dest_dir = models_dir.join(filename);
+        let extracting = models_dir.join(format!("{filename}.extracting"));
+        if extracting.exists() {
+            let _ = std::fs::remove_dir_all(&extracting);
+        }
+        extract_targz(&download_path, &extracting)?;
+        std::fs::rename(&extracting, &dest_dir).map_err(|e| {
+            Error::Model(format!(
+                "rename {} -> {}: {e}",
+                extracting.display(),
+                dest_dir.display()
+            ))
+        })?;
+        let _ = std::fs::remove_file(&download_path);
+    }
+
+    Ok((sha256, size_bytes))
 }
 
 enum ShaCheck {
