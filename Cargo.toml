@@ -19,9 +19,9 @@ path = "src/lib.rs"
 # Heavy native modules (engine, decode) stay opt-in until implemented.
 default = ["download"]
 engine-transcribe = ["dep:transcribe-rs"]
-decode-symphonia = ["dep:symphonia", "dep:rubato"]
+decode-ffmpeg = ["dep:ffmpeg-next"]
 download = ["dep:reqwest", "dep:tokio", "dep:futures-util", "dep:indicatif", "dep:tar", "dep:flate2"]
-full = ["engine-transcribe", "decode-symphonia", "download"]
+full = ["engine-transcribe", "decode-ffmpeg", "download"]
 
 [dependencies]
 anyhow = "1"
@@ -39,9 +39,8 @@ async-trait = "0.1"
 # Engine (handy uses the same crate; CPU path on Linux).
 transcribe-rs = { version = "0.3.8", features = ["whisper-cpp", "onnx"], optional = true }
 
-# Audio decoding (pure-Rust, no system ffmpeg).
-symphonia = { version = "0.5", features = ["all"], optional = true }
-rubato = { version = "0.16", optional = true }
+# Audio decoding via ffmpeg (libav* linked at build time; vendored in Docker).
+ffmpeg-next = { version = "7", optional = true }
 
 # Model downloads.
 reqwest = { version = "0.12", features = ["stream", "rustls-tls"], default-features = false, optional = true }

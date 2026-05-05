@@ -6,6 +6,9 @@ Cargo.lock.bak
 /models/*
 !/models/.gitkeep
 
+# Audio samples
+/samples/
+
 # Editor / OS
 .idea/
 .vscode/
@@ -13,7 +16,6 @@ Cargo.lock.bak
 .DS_Store
 
 # Environment
-
 /.idea/
 /notes-capture.iml
 /.claude/

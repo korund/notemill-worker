@@ -47,6 +47,18 @@ pub enum Command {
         cmd: ModelsCommand,
     },
 
+    /// Decode an audio file to PCM 16 kHz mono and print stats (no engine needed).
+    #[command(hide = true)]
+    Decode {
+        /// Path to the input audio file.
+        #[arg(long)]
+        input: PathBuf,
+
+        /// Write raw f32 PCM to this file instead of just printing stats.
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+
     /// Transcribe a single audio file with the chosen model.
     Run {
         /// Model name from the built-in catalog OR path to a model file.
