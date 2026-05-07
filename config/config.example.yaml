@@ -2,29 +2,37 @@
 #
 # Fields with value CHANGE_ME must be filled in by the operator manually.
 # Fields with value null are optional; leave as-is if not needed.
-
-# --- Daemon mode ---------------------------------------------------------
 #
-# Sections below are required ONLY for `voice2text daemon`. The standalone
-# one-shot path (`voice2text run --input <file>`) ignores them entirely.
+# CLI flags override the YAML values shown below. Repeated `--set key=value`
+# also overrides any scalar by dotted path, e.g. `--set model.name=whisper-large`.
 
-# Per-job pipeline settings: which model to load, where to write output.
-daemon:
-  # Model name from the catalog (`voice2text models list`) OR an absolute
-  # path to a model file/directory. For a path, set `family` explicitly.
-  model: gigaam-v3
+# --- Model ---------------------------------------------------------------
+#
+# Used by `voice2text run file` and `voice2text run queue`.
+# The dedicated `voice2text models list|pull|add` subcommand manages files
+# in `model.dir`.
+model:
+  # Model name from the catalog (`voice2text models list`) OR an absolute path
+  # to a model file/directory. For a path, set `family` explicitly.
+  # CLI override: --model-name
+  name: whisper-medium
 
-  # Required only when `model` is a path. Accepted: whisper | parakeet | giga-am.
-  family: null
+  # Required only when `name` is a path. Accepted: whisper | parakeet | giga-am.
+  # CLI override: --model-family
+  family: whisper
 
-  # CouchDB doc-path prefix. Each job writes to `<path_prefix>/<sanitised dedup_key>`.
-  path_prefix: notes/voice
+  # Directory with model files. Default: ./models.
+  # CLI override: --model-dir
+  dir: ./models
 
+# --- Input (queue mode only) ---------------------------------------------
+#
 # Queue + blob backends. Currently only the local pair (sqlite + fs) ships;
 # a remote backend may be added later without changing this shape.
 input:
-  # Reserved for future modes (http, watch_dir, ...). Today only "queue".
-  mode: queue
+  # Selects which per-driver block below is used. Reserved for future drivers
+  # (http, watch_dir, ...). Today only "queue".
+  driver: queue
 
   queue:
     backend: sqlite
@@ -38,24 +46,45 @@ input:
     # Idle poll interval for the SQLite backend.
     poll_interval_ms: 1000
 
-  blob:
-    backend: fs
-    fs:
-      # Directory shared with the bot container via a docker volume.
-      root: /data/blobs
+    # Where the actual audio bytes live (claim-check pattern: queue carries
+    # metadata + reference, bucket holds the payload). Queue-driver-specific.
+    bucket:
+      backend: fs
+      fs:
+        # Directory shared with the bot container via a docker volume.
+        root: /data/blobs
 
+# --- Output sinks --------------------------------------------------------
+#
+# `sink` selects which per-sink config block is actually used (couchdb / file /
+# stdout). Per-sink blocks (e.g. `couchdb:` below) hold connection details and
+# are read only when `sink` matches.
 #
 # Secrets (passwords) are kept OUTSIDE this file. Two sources are supported,
 # in priority order (the first non-empty one wins):
 #   1. File at the path given by `password_file` (recommended for docker secrets)
 #   2. Environment variable named by `password_env` (recommended for compose with .env)
-
+#
+# Diagnose connectivity / schema with `voice2text couchdb probe`.
 output:
+  # Active sink. Accepted: stdout | file | couchdb. CLI override: --output
+  sink: file
+
+  # stdout has no settings -> no per-sink block.
+
+  # Active when sink: file. Unused otherwise.
+  file:
+    # Filesystem path of the output file. CLI override: --target
+    path: /data/transcripts.md
+    # Truncate on open instead of appending. CLI `--overwrite` forces true.
+    overwrite: false
+
+  # Active when sink: couchdb. Unused otherwise.
   couchdb:
     # Example: http://nas.local:5984
     url: CHANGE_ME
 
-    # Synced from Obsidian via obsidian-livesync
+    # Synced from Obsidian via obsidian-livesync.
     database: CHANGE_ME
 
     username: CHANGE_ME
@@ -63,4 +92,6 @@ output:
     password_env: COUCHDB_PASSWORD
     password_file: /run/secrets/couchdb_password
 
-
+    # Doc-path prefix; each queue job writes to `<target>/<safe dedup_key>.md`.
+    # CLI override: --target
+    target: Inbox

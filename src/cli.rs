@@ -23,26 +23,23 @@ impl From<FamilyArg> for ModelFamily {
 #[derive(Debug, Parser)]
 #[command(name = env!("CARGO_PKG_NAME"), about = env!("CARGO_PKG_DESCRIPTION"))]
 pub struct Cli {
-    /// Models directory. Defaults to ./models, overridden by $NOTES_CAPTURE_MODELS_DIR.
-    #[arg(long, global = true, env = "NOTES_CAPTURE_MODELS_DIR")]
-    pub models_dir: Option<PathBuf>,
-
     #[command(subcommand)]
     pub command: Command,
 }
 
-impl Cli {
-    pub fn models_dir(&self) -> PathBuf {
-        self.models_dir
-            .clone()
-            .unwrap_or_else(|| PathBuf::from("models"))
-    }
-}
-
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Transcribe from a file or a queue.
+    Run {
+        #[command(subcommand)]
+        cmd: RunCommand,
+    },
+
     /// Model management: list / pull / add.
     Models {
+        /// Models directory. Default: ./models.
+        #[arg(long)]
+        dir: Option<PathBuf>,
         #[command(subcommand)]
         cmd: ModelsCommand,
     },
@@ -50,11 +47,8 @@ pub enum Command {
     /// Decode an audio file to PCM 16 kHz mono and print stats (no engine needed).
     #[command(hide = true)]
     Decode {
-        /// Path to the input audio file.
         #[arg(long)]
         input: PathBuf,
-
-        /// Write raw f32 PCM to this file instead of just printing stats.
         #[arg(long)]
         output: Option<PathBuf>,
     },
@@ -64,52 +58,84 @@ pub enum Command {
         #[command(subcommand)]
         cmd: CouchdbCommand,
     },
+}
 
-    /// Run the queue-driven daemon. Configured entirely via config.yaml --
-    /// model, queue/blob backends, output sink. Exits on SIGTERM / Ctrl-C.
-    Daemon {
-        /// Path to config file. Defaults to config/config.yaml.
-        #[arg(long)]
-        config: Option<PathBuf>,
-    },
+/// Flags shared by `run file` and `run queue`.
+#[derive(Debug, clap::Args)]
+pub struct CommonRunArgs {
+    /// Path to config file.
+    #[arg(long, default_value = "config/config.yaml")]
+    pub config: PathBuf,
 
-    /// Transcribe a single audio file with the chosen model.
-    Run {
-        /// Model name from the built-in catalog OR path to a model file.
-        #[arg(long)]
-        model: String,
+    /// Model name from catalog or path to model file. Overrides YAML `model.name`.
+    #[arg(long)]
+    pub model_name: Option<String>,
 
-        /// Engine family for a direct path (`--model <path>`). Not required and ignored
-        /// when a catalog name is used.
-        #[arg(long, value_enum)]
-        family: Option<FamilyArg>,
+    /// Engine family. Required only when --model-name is a direct path. Overrides YAML `model.family`.
+    #[arg(long, value_enum)]
+    pub model_family: Option<FamilyArg>,
+
+    /// Models directory. Overrides YAML `model.dir`.
+    #[arg(long)]
+    pub model_dir: Option<PathBuf>,
+
+    /// Output sink.
+    #[arg(long, value_enum)]
+    pub output: Option<Sink>,
+
+    /// Output target path. For file sink: filesystem path. For couchdb sink: doc path / prefix.
+    /// Forbidden for stdout.
+    #[arg(long)]
+    pub target: Option<String>,
+
+    /// Truncate the output file instead of appending. FileSink only.
+    #[arg(long)]
+    pub overwrite: bool,
+
+    /// Override a YAML config key. Format: key=value (dotted keys, YAML scalars). Repeatable.
+    #[arg(long = "set", value_name = "KEY=VALUE")]
+    pub set_overrides: Vec<String>,
+}
+
+impl CommonRunArgs {
+    /// Parse --set KEY=VALUE pairs into (key, value) tuples.
+    pub fn parsed_set_overrides(&self) -> Result<Vec<(String, String)>, String> {
+        self.set_overrides
+            .iter()
+            .map(|s| {
+                let (k, v) = s
+                    .split_once('=')
+                    .ok_or_else(|| format!("--set {s:?}: expected KEY=VALUE"))?;
+                Ok((k.to_string(), v.to_string()))
+            })
+            .collect()
+    }
+}
+
+#[derive(Debug, Subcommand)]
+pub enum RunCommand {
+    /// Transcribe a single audio file.
+    File {
+        #[command(flatten)]
+        common: CommonRunArgs,
 
         /// Path to the input audio file.
-        #[arg(long)]
         input: PathBuf,
 
-        /// Output sink. Default: stdout.
-        #[arg(long, value_enum, default_value_t = OutputKind::Stdout)]
-        output: OutputKind,
-
-        /// Output target path. Required for `file` (filesystem path) and
-        /// `couchdb` (path inside the Obsidian vault). Forbidden for `stdout`.
-        #[arg(long)]
-        path: Option<String>,
-
-        /// Prepend YAML frontmatter to the output. Format:
-        /// "key1: value1, key2: value2". Example:
-        /// --frontmatter "from: file, source: telegram".
-        /// Applies to all output sinks (stdout, file, couchdb).
-        /// Values cannot contain commas. Best-effort -- the output is
-        /// written even if the spec is malformed.
+        /// Prepend YAML frontmatter. Format: "key1: value1, key2: value2".
         #[arg(long)]
         frontmatter: Option<String>,
+    },
+
+    /// Run the queue-driven worker. Configured via config.yaml and --set.
+    Queue {
+        #[command(flatten)]
+        common: CommonRunArgs,
     },
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
-pub enum OutputKind {
+pub enum Sink {
     Stdout,
     File,
     Couchdb,
@@ -121,19 +147,13 @@ pub enum ModelsCommand {
     List,
     /// Download a model by name from the catalog into the models directory.
     Pull {
-        /// Model name (see `models list`).
         name: String,
     },
     /// Add a model by URL: download, compute sha256/size, register in catalog.
     Add {
-        /// Download URL of the model file or .tar.gz archive.
         url: String,
-
-        /// Engine family (whisper, parakeet, giga-am).
         #[arg(long, value_enum)]
         family: FamilyArg,
-
-        /// Override the auto-derived model name.
         #[arg(long)]
         name: Option<String>,
     },
@@ -143,13 +163,10 @@ pub enum ModelsCommand {
 pub enum CouchdbCommand {
     /// Probe the configured database: print metadata and a few sample documents.
     Probe {
-        /// Path to config file. Defaults to config/config.yaml.
         #[arg(long)]
         config: Option<PathBuf>,
-        /// How many sample documents to fetch.
         #[arg(long, default_value_t = 10)]
         limit: usize,
-        /// How many chunk documents to fetch from the first viable sample.
         #[arg(long, default_value_t = 3)]
         chunks: usize,
     },

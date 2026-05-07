@@ -8,44 +8,33 @@ use crate::{Error, Result};
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
+    #[serde(default)]
+    pub model: Option<ModelConfig>,
     pub output: OutputConfig,
     #[serde(default)]
     pub input: Option<InputConfig>,
-    /// Daemon-only settings (model, output path prefix). Required for the
-    /// `daemon` subcommand, ignored for `run`.
-    #[serde(default)]
-    pub daemon: Option<DaemonConfig>,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct DaemonConfig {
-    /// Model name from the catalog, or absolute path to a model file/dir.
-    pub model: String,
-    /// Engine family override; required only when `model` is a path.
-    /// Accepted values: "whisper", "parakeet", "giga-am".
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct ModelConfig {
+    /// Model name from catalog or path to model file.
+    #[serde(default)]
+    pub name: Option<String>,
+    /// Engine family. Required only when name is a direct path.
     #[serde(default)]
     pub family: Option<String>,
-    /// CouchDB doc-path prefix for output. Each job becomes
-    /// `<prefix>/<sanitised dedup_key>`. Default: "notes/voice".
-    #[serde(default = "default_path_prefix")]
-    pub path_prefix: String,
+    /// Models directory. Default: ./models.
+    #[serde(default)]
+    pub dir: Option<PathBuf>,
 }
 
-fn default_path_prefix() -> String {
-    "notes/voice".into()
-}
-
-/// Daemon-mode input configuration. Absent in standalone (`run --input <path>`)
-/// invocations. Required for the `daemon` subcommand.
 #[derive(Debug, Deserialize)]
 pub struct InputConfig {
-    /// Currently only "queue" is supported. Reserved for future modes
-    /// (http, watch_dir, ...).
-    pub mode: String,
+    /// Currently only "queue" is supported. Reserved for future drivers
+    /// (http, watch_dir, ...). Selects which per-driver block below is used.
+    pub driver: String,
     #[serde(default)]
     pub queue: Option<QueueConfig>,
-    #[serde(default)]
-    pub blob: Option<BlobConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -60,6 +49,11 @@ pub struct QueueConfig {
     pub max_receive: u32,
     #[serde(default = "default_poll_ms")]
     pub poll_interval_ms: u64,
+
+    /// Storage for the actual audio bytes the queue points to (claim-check).
+    /// Specific to the queue driver; other drivers carry payload differently.
+    #[serde(default)]
+    pub bucket: Option<BucketConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -68,15 +62,15 @@ pub struct SqliteQueueConfig {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct BlobConfig {
+pub struct BucketConfig {
     /// "fs" (local). Remote backends are out of scope for this build.
     pub backend: String,
     #[serde(default)]
-    pub fs: Option<FsBlobConfig>,
+    pub fs: Option<FsBucketConfig>,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct FsBlobConfig {
+pub struct FsBucketConfig {
     pub root: PathBuf,
 }
 
@@ -92,8 +86,21 @@ fn default_poll_ms() -> u64 {
 
 #[derive(Debug, Deserialize)]
 pub struct OutputConfig {
+    /// Active sink. Accepted: "stdout", "file", "couchdb".
+    /// Selects which per-sink config block below is actually used.
+    /// CLI `--output` overrides this.
+    #[serde(default)]
+    pub sink: Option<String>,
+
     #[serde(default)]
     pub couchdb: Option<CouchdbConfig>,
+    #[serde(default)]
+    pub file: Option<FileSinkConfig>,
+    // stdout has no settings -> no per-sink block.
+}
+
+fn default_couchdb_target() -> String {
+    "Inbox".into()
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -106,10 +113,30 @@ pub struct CouchdbConfig {
     pub password_env: Option<String>,
     #[serde(default)]
     pub password_file: Option<PathBuf>,
+
+    /// Doc-path prefix; each queue job writes to `<target>/<safe dedup_key>.md`.
+    /// CLI `--target` overrides this.
+    #[serde(default = "default_couchdb_target")]
+    pub target: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct FileSinkConfig {
+    /// Filesystem path of the output file. CLI `--target` overrides this.
+    pub path: PathBuf,
+    /// Truncate the file on open instead of appending. Default: false.
+    /// CLI `--overwrite` forces true.
+    #[serde(default)]
+    pub overwrite: bool,
 }
 
 impl Config {
     pub fn load(path: &Path) -> Result<Self> {
+        Self::load_merged(path, &[])
+    }
+
+    /// Load config from YAML, then apply --set key=value overrides (dotted keys, YAML scalars).
+    pub fn load_merged(path: &Path, overrides: &[(String, String)]) -> Result<Self> {
         let raw = std::fs::read_to_string(path).map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 Error::Config(format!(
@@ -121,9 +148,37 @@ impl Config {
                 Error::Config(format!("read {}: {e}", path.display()))
             }
         })?;
-        serde_yaml::from_str(&raw)
+        let mut value: serde_yaml::Value = serde_yaml::from_str(&raw)
+            .map_err(|e| Error::Config(format!("parse {}: {e}", path.display())))?;
+        for (key, val_str) in overrides {
+            set_dotted_key(&mut value, key, val_str)?;
+        }
+        serde_yaml::from_value(value)
             .map_err(|e| Error::Config(format!("parse {}: {e}", path.display())))
     }
+}
+
+fn set_dotted_key(root: &mut serde_yaml::Value, key: &str, val_str: &str) -> Result<()> {
+    let val: serde_yaml::Value = serde_yaml::from_str(val_str)
+        .map_err(|e| Error::Config(format!("--set {key}={val_str}: {e}")))?;
+    let parts: Vec<&str> = key.split('.').collect();
+    let mut cur = root;
+    for part in &parts[..parts.len() - 1] {
+        if !cur.is_mapping() {
+            *cur = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        }
+        let k = serde_yaml::Value::String((*part).to_string());
+        cur = cur
+            .as_mapping_mut()
+            .unwrap()
+            .entry(k)
+            .or_insert_with(|| serde_yaml::Value::Mapping(serde_yaml::Mapping::new()));
+    }
+    let last = serde_yaml::Value::String(parts.last().unwrap().to_string());
+    if let Some(m) = cur.as_mapping_mut() {
+        m.insert(last, val);
+    }
+    Ok(())
 }
 
 impl CouchdbConfig {
