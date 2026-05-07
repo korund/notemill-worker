@@ -65,6 +65,14 @@ pub enum Command {
         cmd: CouchdbCommand,
     },
 
+    /// Run the queue-driven daemon. Configured entirely via config.yaml --
+    /// model, queue/blob backends, output sink. Exits on SIGTERM / Ctrl-C.
+    Daemon {
+        /// Path to config file. Defaults to config/config.yaml.
+        #[arg(long)]
+        config: Option<PathBuf>,
+    },
+
     /// Transcribe a single audio file with the chosen model.
     Run {
         /// Model name from the built-in catalog OR path to a model file.

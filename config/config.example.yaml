@@ -2,6 +2,48 @@
 #
 # Fields with value CHANGE_ME must be filled in by the operator manually.
 # Fields with value null are optional; leave as-is if not needed.
+
+# --- Daemon mode ---------------------------------------------------------
+#
+# Sections below are required ONLY for `voice2text daemon`. The standalone
+# one-shot path (`voice2text run --input <file>`) ignores them entirely.
+
+# Per-job pipeline settings: which model to load, where to write output.
+daemon:
+  # Model name from the catalog (`voice2text models list`) OR an absolute
+  # path to a model file/directory. For a path, set `family` explicitly.
+  model: gigaam-v3
+
+  # Required only when `model` is a path. Accepted: whisper | parakeet | giga-am.
+  family: null
+
+  # CouchDB doc-path prefix. Each job writes to `<path_prefix>/<sanitised dedup_key>`.
+  path_prefix: notes/voice
+
+# Queue + blob backends. Currently only the local pair (sqlite + fs) ships;
+# a remote backend may be added later without changing this shape.
+input:
+  # Reserved for future modes (http, watch_dir, ...). Today only "queue".
+  mode: queue
+
+  queue:
+    backend: sqlite
+    sqlite:
+      path: /data/queue.db
+
+    # How long a popped message stays invisible before redelivery.
+    visibility_timeout_sec: 300
+    # After this many redeliveries the message is moved to the DLQ table.
+    max_receive: 5
+    # Idle poll interval for the SQLite backend.
+    poll_interval_ms: 1000
+
+  blob:
+    backend: fs
+    fs:
+      # Directory shared with the bot container via a docker volume.
+      root: /data/blobs
+
 #
 # Secrets (passwords) are kept OUTSIDE this file. Two sources are supported,
 # in priority order (the first non-empty one wins):

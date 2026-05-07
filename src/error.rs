@@ -17,6 +17,12 @@ pub enum Error {
     #[error("output error: {0}")]
     Output(String),
 
+    #[error("queue error: {0}")]
+    Queue(String),
+
+    #[error("blob error: {0}")]
+    Blob(String),
+
     #[error("config error: {0}")]
     Config(String),
 

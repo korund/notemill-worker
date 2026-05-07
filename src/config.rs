@@ -9,6 +9,85 @@ use crate::{Error, Result};
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub output: OutputConfig,
+    #[serde(default)]
+    pub input: Option<InputConfig>,
+    /// Daemon-only settings (model, output path prefix). Required for the
+    /// `daemon` subcommand, ignored for `run`.
+    #[serde(default)]
+    pub daemon: Option<DaemonConfig>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DaemonConfig {
+    /// Model name from the catalog, or absolute path to a model file/dir.
+    pub model: String,
+    /// Engine family override; required only when `model` is a path.
+    /// Accepted values: "whisper", "parakeet", "giga-am".
+    #[serde(default)]
+    pub family: Option<String>,
+    /// CouchDB doc-path prefix for output. Each job becomes
+    /// `<prefix>/<sanitised dedup_key>`. Default: "notes/voice".
+    #[serde(default = "default_path_prefix")]
+    pub path_prefix: String,
+}
+
+fn default_path_prefix() -> String {
+    "notes/voice".into()
+}
+
+/// Daemon-mode input configuration. Absent in standalone (`run --input <path>`)
+/// invocations. Required for the `daemon` subcommand.
+#[derive(Debug, Deserialize)]
+pub struct InputConfig {
+    /// Currently only "queue" is supported. Reserved for future modes
+    /// (http, watch_dir, ...).
+    pub mode: String,
+    #[serde(default)]
+    pub queue: Option<QueueConfig>,
+    #[serde(default)]
+    pub blob: Option<BlobConfig>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct QueueConfig {
+    /// "sqlite" (local). Remote backends are out of scope for this build.
+    pub backend: String,
+    #[serde(default)]
+    pub sqlite: Option<SqliteQueueConfig>,
+    #[serde(default = "default_visibility_sec")]
+    pub visibility_timeout_sec: u32,
+    #[serde(default = "default_max_receive")]
+    pub max_receive: u32,
+    #[serde(default = "default_poll_ms")]
+    pub poll_interval_ms: u64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SqliteQueueConfig {
+    pub path: PathBuf,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BlobConfig {
+    /// "fs" (local). Remote backends are out of scope for this build.
+    pub backend: String,
+    #[serde(default)]
+    pub fs: Option<FsBlobConfig>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FsBlobConfig {
+    pub root: PathBuf,
+}
+
+fn default_visibility_sec() -> u32 {
+    300
+}
+fn default_max_receive() -> u32 {
+    5
+}
+fn default_poll_ms() -> u64 {
+    1000
 }
 
 #[derive(Debug, Deserialize)]
@@ -17,7 +96,7 @@ pub struct OutputConfig {
     pub couchdb: Option<CouchdbConfig>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct CouchdbConfig {
     pub url: String,
     pub database: String,

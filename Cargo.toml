@@ -10,7 +10,7 @@ license = "MIT"
 default = ["download"]
 engine-transcribe = ["dep:transcribe-rs"]
 decode-ffmpeg = ["dep:ffmpeg-next"]
-download = ["dep:reqwest", "dep:tokio", "dep:futures-util", "dep:indicatif", "dep:tar", "dep:flate2"]
+download = ["dep:reqwest", "dep:futures-util", "dep:indicatif", "dep:tar", "dep:flate2"]
 full = ["engine-transcribe", "decode-ffmpeg", "download"]
 
 [dependencies]
@@ -25,6 +25,8 @@ hex = "0.4"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 async-trait = "0.1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "io-util", "time", "sync", "signal"] }
+rusqlite = { version = "0.31", features = ["bundled"] }
 ureq = { version = "2", features = ["json", "tls"] }
 base64 = "0.22"
 serde_yaml = "0.9"
@@ -38,7 +40,6 @@ ffmpeg-next = { version = "7", optional = true }
 
 # Model downloads.
 reqwest = { version = "0.12", features = ["stream", "rustls-tls"], default-features = false, optional = true }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "io-util"], optional = true }
 futures-util = { version = "0.3", optional = true }
 indicatif = { version = "0.17", optional = true }
 tar = { version = "0.4", optional = true }
