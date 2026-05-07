@@ -4,6 +4,7 @@
 //! and (if needed) alternative engines can be plugged in without touching the rest.
 
 pub mod cli;
+pub mod config;
 pub mod decode;
 pub mod engine;
 pub mod error;

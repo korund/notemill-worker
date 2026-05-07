@@ -12,7 +12,7 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     let models_dir = cli.models_dir();
-    let catalog = models::Catalog::load(&models_dir)?;
+    let catalog = models::Catalog::load()?;
     let manager = models::Manager::new(models_dir, catalog);
 
     match cli.command {

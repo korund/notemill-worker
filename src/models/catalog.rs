@@ -40,17 +40,17 @@ struct CatalogFile {
     models: Vec<CatalogEntry>,
 }
 
-const EMBEDDED: &str = include_str!("../../assets/models_catalog.toml");
-const CATALOG_FILENAME: &str = "models_catalog.toml";
+const EMBEDDED: &str = include_str!("../../config/models.toml");
+const CATALOG_PATH: &str = "config/models.toml";
 
 impl Catalog {
-    /// Load catalog: embedded entries as base, merged with external file
-    /// (`<models_dir>/models_catalog.toml`) if it exists. External entries
-    /// override embedded ones by name.
-    pub fn load(models_dir: &Path) -> Result<Self> {
+    /// Load catalog: embedded entries as base, merged with the external file
+    /// at `config/models.toml` if it exists. External entries override
+    /// embedded ones by name.
+    pub fn load() -> Result<Self> {
         let mut entries = Self::parse_toml(EMBEDDED, "embedded catalog")?;
 
-        let external_path = models_dir.join(CATALOG_FILENAME);
+        let external_path = Path::new(CATALOG_PATH);
         if external_path.is_file() {
             let content = std::fs::read_to_string(&external_path)
                 .map_err(|e| Error::Config(format!("read {}: {e}", external_path.display())))?;
@@ -84,8 +84,12 @@ impl Catalog {
 
     /// Append (or replace by name) an entry in the external catalog file.
     /// Creates the file if it does not exist yet.
-    pub fn append_to_file(models_dir: &Path, entry: &CatalogEntry) -> Result<()> {
-        let path = models_dir.join(CATALOG_FILENAME);
+    pub fn append_to_file(entry: &CatalogEntry) -> Result<()> {
+        let path = Path::new(CATALOG_PATH);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| Error::Config(format!("mkdir {}: {e}", parent.display())))?;
+        }
 
         let mut external = if path.is_file() {
             let content = std::fs::read_to_string(&path)

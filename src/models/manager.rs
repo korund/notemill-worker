@@ -76,7 +76,7 @@ impl Manager {
 
         if entry.url.trim().is_empty() {
             return Err(Error::Model(format!(
-                "catalog entry `{name}` has no URL -- fill in assets/models_catalog.toml"
+                "catalog entry `{name}` has no URL -- fill in config/models.toml"
             )));
         }
 
@@ -255,7 +255,7 @@ impl Manager {
             is_directory,
         };
 
-        Catalog::append_to_file(&self.dir, &entry)?;
+        Catalog::append_to_file(&entry)?;
         println!("Added `{name}` to catalog");
         Ok(())
     }
