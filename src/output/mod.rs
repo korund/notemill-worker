@@ -3,6 +3,7 @@
 //! Currently stdout or a text file. Others may be added later.
 //! All implementations are behind a common trait.
 
+mod concat;
 mod file;
 pub mod couchdb;
 pub mod frontmatter;

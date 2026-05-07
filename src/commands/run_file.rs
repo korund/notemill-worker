@@ -31,12 +31,17 @@ pub fn run(
                     "--target must not be set with --output stdout".into(),
                 ));
             }
-            Box::new(output::StdoutSink::new())
+            Box::new(output::StdoutSink::new().with_separator(resolve::stdout_separator(&cfg)))
         }
         Sink::File => {
             let p = resolve::file_path(&cfg, common.target)?;
             let overwrite = resolve::file_overwrite(&cfg, common.overwrite);
-            Box::new(output::FileSink::new(PathBuf::from(p)).with_overwrite(overwrite))
+            let separator = resolve::file_separator(&cfg);
+            Box::new(
+                output::FileSink::new(PathBuf::from(p))
+                    .with_overwrite(overwrite)
+                    .with_separator(separator),
+            )
         }
         Sink::Couchdb => {
             let (cdb, pwd) = resolve::load_couchdb_config(&cfg)?;

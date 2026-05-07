@@ -70,7 +70,11 @@ output:
   # Active sink. Accepted: stdout | file | couchdb. CLI override: --output
   sink: file
 
-  # stdout has no settings -> no per-sink block.
+  # Active when sink: stdout. Unused otherwise.
+  stdout:
+    # Marker between consecutive writes; written as `\n<separator>\n`.
+    # Default "---". Set to null to disable.
+    separator: "---"
 
   # Active when sink: file. Unused otherwise.
   file:
@@ -78,6 +82,9 @@ output:
     path: /data/transcripts.md
     # Truncate on open instead of appending. CLI `--overwrite` forces true.
     overwrite: false
+    # Marker between consecutive writes; written as `\n<separator>\n`.
+    # Default "---" (markdown horizontal rule). Set to null to disable.
+    separator: "---"
 
   # Active when sink: couchdb. Unused otherwise.
   couchdb:

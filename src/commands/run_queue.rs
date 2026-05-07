@@ -13,11 +13,11 @@ use crate::{decode, engine, models, output, Error, Result};
 use super::resolve;
 
 enum QueueSink {
-    /// Shared persistent sink (file or stdout). Separator is written between jobs.
+    /// Shared persistent sink (file or stdout). The sink itself handles any
+    /// inter-job separator (see `output::FileSink::with_separator`).
     Shared {
         sink: Box<dyn output::OutputSink>,
         output_ref: String,
-        first_job: bool,
     },
     /// Per-job CouchDB sink; path = prefix/safe_dedup_key.
     Couchdb {
@@ -35,11 +35,7 @@ struct QueueProcessor {
 impl JobProcessor for QueueProcessor {
     fn process(&mut self, source: &dyn AudioSource, job: &TranscribeJob) -> Result<String> {
         match &mut self.queue_sink {
-            QueueSink::Shared { sink, output_ref, first_job } => {
-                if !*first_job {
-                    sink.write("\n---\n")?;
-                }
-                *first_job = false;
+            QueueSink::Shared { sink, output_ref } => {
                 self.pipeline.run_one(source, sink.as_mut(), None)?;
                 Ok(output_ref.clone())
             }
@@ -158,17 +154,20 @@ fn build_queue_sink(
 ) -> Result<QueueSink> {
     match sink_kind {
         Sink::Stdout => Ok(QueueSink::Shared {
-            sink: Box::new(output::StdoutSink::new()),
+            sink: Box::new(output::StdoutSink::new().with_separator(resolve::stdout_separator(cfg))),
             output_ref: "stdout://".to_string(),
-            first_job: true,
         }),
         Sink::File => {
             let p = resolve::file_path(cfg, cli_target)?;
             let overwrite = resolve::file_overwrite(cfg, cli_overwrite);
+            let separator = resolve::file_separator(cfg);
             Ok(QueueSink::Shared {
                 output_ref: format!("file://{p}"),
-                sink: Box::new(output::FileSink::new(PathBuf::from(p)).with_overwrite(overwrite)),
-                first_job: true,
+                sink: Box::new(
+                    output::FileSink::new(PathBuf::from(p))
+                        .with_overwrite(overwrite)
+                        .with_separator(separator),
+                ),
             })
         }
         Sink::Couchdb => {

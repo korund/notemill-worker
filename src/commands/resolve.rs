@@ -101,3 +101,15 @@ pub fn file_path(cfg: &Config, cli: Option<String>) -> Result<String> {
 pub fn file_overwrite(cfg: &Config, cli: bool) -> bool {
     cli || cfg.output.file.as_ref().map(|f| f.overwrite).unwrap_or(false)
 }
+
+/// File sink separator marker, taken from `output.file.separator`.
+/// `None` means no separator is inserted between writes.
+pub fn file_separator(cfg: &Config) -> Option<String> {
+    cfg.output.file.as_ref().and_then(|f| f.separator.clone())
+}
+
+/// Stdout sink separator marker, taken from `output.stdout.separator`.
+/// `None` means no separator is inserted between writes.
+pub fn stdout_separator(cfg: &Config) -> Option<String> {
+    cfg.output.stdout.as_ref().and_then(|s| s.separator.clone())
+}

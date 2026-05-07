@@ -96,7 +96,20 @@ pub struct OutputConfig {
     pub couchdb: Option<CouchdbConfig>,
     #[serde(default)]
     pub file: Option<FileSinkConfig>,
-    // stdout has no settings -> no per-sink block.
+    #[serde(default)]
+    pub stdout: Option<StdoutSinkConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct StdoutSinkConfig {
+    /// Marker written between consecutive chunks as `\n<separator>\n`.
+    /// Default: "---". Set to `null` to disable.
+    #[serde(default = "default_stdout_separator")]
+    pub separator: Option<String>,
+}
+
+fn default_stdout_separator() -> Option<String> {
+    Some("---".into())
 }
 
 fn default_couchdb_target() -> String {
@@ -128,6 +141,14 @@ pub struct FileSinkConfig {
     /// CLI `--overwrite` forces true.
     #[serde(default)]
     pub overwrite: bool,
+    /// Marker written between consecutive chunks as `\n<separator>\n`.
+    /// Default: "---" (markdown horizontal rule). Set to `null` to disable.
+    #[serde(default = "default_file_separator")]
+    pub separator: Option<String>,
+}
+
+fn default_file_separator() -> Option<String> {
+    Some("---".into())
 }
 
 impl Config {
