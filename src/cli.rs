@@ -59,6 +59,12 @@ pub enum Command {
         output: Option<PathBuf>,
     },
 
+    /// CouchDB output diagnostics and operations.
+    Couchdb {
+        #[command(subcommand)]
+        cmd: CouchdbCommand,
+    },
+
     /// Transcribe a single audio file with the chosen model.
     Run {
         /// Model name from the built-in catalog OR path to a model file.
@@ -74,10 +80,22 @@ pub enum Command {
         #[arg(long)]
         input: PathBuf,
 
-        /// Path to the output file. Omit to write to stdout.
+        /// Output sink. Default: stdout.
+        #[arg(long, value_enum, default_value_t = OutputKind::Stdout)]
+        output: OutputKind,
+
+        /// Output target path. Required for `file` (filesystem path) and
+        /// `couchdb` (path inside the Obsidian vault). Forbidden for `stdout`.
         #[arg(long)]
-        output: Option<PathBuf>,
+        path: Option<String>,
     },
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum OutputKind {
+    Stdout,
+    File,
+    Couchdb,
 }
 
 #[derive(Debug, Subcommand)]
@@ -101,5 +119,21 @@ pub enum ModelsCommand {
         /// Override the auto-derived model name.
         #[arg(long)]
         name: Option<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum CouchdbCommand {
+    /// Probe the configured database: print metadata and a few sample documents.
+    Probe {
+        /// Path to config file. Defaults to config/config.yaml.
+        #[arg(long)]
+        config: Option<PathBuf>,
+        /// How many sample documents to fetch.
+        #[arg(long, default_value_t = 10)]
+        limit: usize,
+        /// How many chunk documents to fetch from the first viable sample.
+        #[arg(long, default_value_t = 3)]
+        chunks: usize,
     },
 }

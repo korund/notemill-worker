@@ -2,7 +2,9 @@
 **/*.rs.bk
 Cargo.lock.bak
 
-# Local model cache (must never be committed)
+# Local only assets
+/config/.cache
+/config/config.yaml
 /models/*
 !/models/.gitkeep
 
@@ -12,11 +14,7 @@ Cargo.lock.bak
 # Editor / OS
 .idea/
 .vscode/
+.claude/
+*.iml
 *.swp
 .DS_Store
-
-# Environment
-/.idea/
-/notes-capture.iml
-/.claude/
-/.SynologyWorkingDirectory/

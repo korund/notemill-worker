@@ -1,0 +1,24 @@
+# voice2text configuration
+#
+# Fields with value CHANGE_ME must be filled in by the operator manually.
+# Fields with value null are optional; leave as-is if not needed.
+#
+# Secrets (passwords) are kept OUTSIDE this file. Two sources are supported,
+# in priority order (the first non-empty one wins):
+#   1. File at the path given by `password_file` (recommended for docker secrets)
+#   2. Environment variable named by `password_env` (recommended for compose with .env)
+
+output:
+  couchdb:
+    # Example: http://nas.local:5984
+    url: CHANGE_ME
+
+    # Synced from Obsidian via obsidian-livesync
+    database: CHANGE_ME
+
+    username: CHANGE_ME
+
+    password_env: COUCHDB_PASSWORD
+    password_file: /run/secrets/couchdb_password
+
+

@@ -11,5 +11,6 @@ pub mod error;
 pub mod input;
 pub mod models;
 pub mod output;
+pub mod state;
 
 pub use error::{Error, Result};
