@@ -134,10 +134,16 @@ fn main() -> Result<()> {
             input: input_path,
             output,
             path,
+            frontmatter,
         } => {
             let model_handle = manager.resolve(&model, family.map(Into::into))?;
 
             let mut sink: Box<dyn output::OutputSink> = build_run_sink(output, path)?;
+
+            let fm = frontmatter
+                .as_deref()
+                .filter(|s| !s.is_empty())
+                .and_then(voice2text::output::frontmatter::render_from_spec);
 
             let source: Box<dyn input::AudioSource> =
                 Box::new(input::LocalFileSource::new(input_path));
@@ -148,7 +154,11 @@ fn main() -> Result<()> {
             let raw = source.read()?;
             let pcm = decoder.decode(&raw)?;
             let text = transcriber.transcribe(&pcm)?;
-            sink.write(&text)?;
+            let body = match fm {
+                Some(prefix) => format!("{}{}", prefix, text),
+                None => text,
+            };
+            sink.write(&body)?;
             Ok(())
         }
     }

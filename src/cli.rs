@@ -88,6 +88,15 @@ pub enum Command {
         /// `couchdb` (path inside the Obsidian vault). Forbidden for `stdout`.
         #[arg(long)]
         path: Option<String>,
+
+        /// Prepend YAML frontmatter to the output. Format:
+        /// "key1: value1, key2: value2". Example:
+        /// --frontmatter "from: file, source: telegram".
+        /// Applies to all output sinks (stdout, file, couchdb).
+        /// Values cannot contain commas. Best-effort -- the output is
+        /// written even if the spec is malformed.
+        #[arg(long)]
+        frontmatter: Option<String>,
     },
 }
 

@@ -5,6 +5,7 @@
 
 mod file;
 pub mod couchdb;
+pub mod frontmatter;
 mod stdout;
 
 pub use file::FileSink;
