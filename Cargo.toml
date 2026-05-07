@@ -1,5 +1,5 @@
 [package]
-name = "notes-capture"
+name = "voice2text"
 version = "0.0.1"
 edition = "2021"
 description = "CLI transcription tool over transcribe-rs (Whisper / Parakeet / GigaAM, GGUF, CPU)"

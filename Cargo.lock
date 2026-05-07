@@ -1201,31 +1201,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "notes-capture"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "async-trait",
- "clap",
- "ffmpeg-next",
- "flate2",
- "futures-util",
- "hex",
- "indicatif",
- "reqwest",
- "serde",
- "serde_json",
- "sha2",
- "tar",
- "thiserror 1.0.69",
- "tokio",
- "toml",
- "tracing",
- "tracing-subscriber",
- "transcribe-rs",
-]
-
-[[package]]
 name = "nu-ansi-term"
 version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2410,6 +2385,31 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
+
+[[package]]
+name = "voice2text"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "clap",
+ "ffmpeg-next",
+ "flate2",
+ "futures-util",
+ "hex",
+ "indicatif",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tar",
+ "thiserror 1.0.69",
+ "tokio",
+ "toml",
+ "tracing",
+ "tracing-subscriber",
+ "transcribe-rs",
+]
 
 [[package]]
 name = "want"

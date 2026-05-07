@@ -1,6 +1,6 @@
 use clap::Parser;
-use notes_capture::cli::{Cli, Command, ModelsCommand};
-use notes_capture::{decode, engine, input, models, output, Result};
+use voice2text::cli::{Cli, Command, ModelsCommand};
+use voice2text::{decode, engine, input, models, output, Result};
 use tracing_subscriber::EnvFilter;
 
 fn main() -> Result<()> {
@@ -55,7 +55,7 @@ fn main() -> Result<()> {
                     .flat_map(|s| s.to_le_bytes())
                     .collect();
                 std::fs::write(&path, &bytes)
-                    .map_err(|e| notes_capture::Error::Output(format!("write {}: {e}", path.display())))?;
+                    .map_err(|e| voice2text::Error::Output(format!("write {}: {e}", path.display())))?;
                 println!("PCM f32 written to {}", path.display());
             }
 
