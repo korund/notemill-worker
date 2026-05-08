@@ -18,7 +18,7 @@ pub struct TranscribeJob {
     #[serde(rename = "type")]
     pub kind: TranscribeKind,
     pub dedup_key: String,
-    pub blob_key: String,
+    pub audio_key: String,
     pub source: TelegramSource,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hints: Option<TranscribeHints>,
@@ -110,8 +110,8 @@ pub enum JobResult {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ErrorCode {
-    /// Blob not found in the BlobStore.
-    BlobMissing,
+    /// Object referenced by `audio_key` not found.
+    AudioMissing,
     /// ffmpeg (or other decoder) failed.
     DecodeFailed,
     /// Transcription engine failed.
@@ -153,7 +153,7 @@ mod tests {
             "v": 1,
             "type": "transcribe",
             "dedup_key": "tg:123456789:42",
-            "blob_key": "audio/2026/05/07/abc123.oga",
+            "audio_key": "audio/2026/05/07/abc123.oga",
             "source": {
                 "kind": "telegram",
                 "chat_id": 123456789,
@@ -175,7 +175,7 @@ mod tests {
         assert_eq!(job.source.chat_id, 123456789);
         let back = serde_json::to_string(&job).unwrap();
         let job2: TranscribeJob = serde_json::from_str(&back).unwrap();
-        assert_eq!(job2.blob_key, job.blob_key);
+        assert_eq!(job2.audio_key, job.audio_key);
     }
 
     #[test]

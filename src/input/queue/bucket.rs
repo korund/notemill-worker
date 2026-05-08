@@ -1,4 +1,4 @@
-//! Blob storage: backend-agnostic byte KV with `blob_key` addressing.
+//! Bucket storage: backend-agnostic byte KV with `audio_key` addressing.
 //!
 //! Mirrors `docs/contract.md` section 5. Implementations live under
 //! `backends/`. Currently only the local filesystem backend is provided;
@@ -11,7 +11,7 @@
 //!
 //! Semantics:
 //! - `put` is atomic and fails on collision (enforces immutability of a
-//!   `blob_key` once written; collisions are a bug, not a normal case).
+//!   `audio_key` once written; collisions are a bug, not a normal case).
 //! - `get` returns `Ok(None)` on missing key, never an error.
 //! - `delete` is idempotent: missing key is `Ok(())`.
 //! - `head` returns metadata or `Ok(None)` on missing key.
@@ -25,17 +25,17 @@ use crate::{
 
 /// Object metadata returned by `head`.
 #[derive(Debug, Clone)]
-pub struct BlobMeta {
+pub struct BucketMeta {
     pub size: u64,
     /// Backend-specific entity tag. Filesystem backend uses sha256-hex;
     /// a remote backend would typically forward whatever native tag it has.
     pub etag: String,
 }
 
-/// Backend-agnostic blob store.
-pub trait BlobStore: Send + Sync {
+/// Backend-agnostic bucket store.
+pub trait Bucket: Send + Sync {
     /// Write bytes under `key`. Fails if the key already exists.
-    /// On `AlreadyExists` the returned error is `Error::Blob` with a message
+    /// On `AlreadyExists` the returned error is `Error::Bucket` with a message
     /// starting with the prefix `"already_exists:"` (see [`is_already_exists`]).
     fn put(&self, key: &str, bytes: &[u8]) -> impl Future<Output = Result<()>> + Send;
 
@@ -46,36 +46,36 @@ pub trait BlobStore: Send + Sync {
     fn delete(&self, key: &str) -> impl Future<Output = Result<()>> + Send;
 
     /// Stat `key`. Returns `Ok(None)` if missing.
-    fn head(&self, key: &str) -> impl Future<Output = Result<Option<BlobMeta>>> + Send;
+    fn head(&self, key: &str) -> impl Future<Output = Result<Option<BucketMeta>>> + Send;
 }
 
-/// Detect whether an error returned by `BlobStore::put` represents an
+/// Detect whether an error returned by `Bucket::put` represents an
 /// `AlreadyExists` collision (vs a real I/O error).
 pub fn is_already_exists(err: &Error) -> bool {
-    matches!(err, Error::Blob(msg) if msg.starts_with("already_exists:"))
+    matches!(err, Error::Bucket(msg) if msg.starts_with("already_exists:"))
 }
 
 // --- Adapter to AudioSource --------------------------------------------------
 
-/// In-memory `AudioSource` backed by bytes fetched from a `BlobStore`.
+/// In-memory `AudioSource` backed by bytes fetched from a `Bucket`.
 ///
 /// Bridges the synchronous decode pipeline (`AudioSource::read` is sync) and
-/// the async blob layer: bytes are fetched once via `fetch`, then handed out
+/// the async bucket layer: bytes are fetched once via `fetch`, then handed out
 /// synchronously on `read`.
 ///
 /// `format_hint` is what the decoder sees; populate it from the job hints
-/// (`hints.mime`) or by parsing the extension off `blob_key`.
-pub struct BlobAudioSource {
+/// (`hints.mime`) or by parsing the extension off `audio_key`.
+pub struct BucketAudioSource {
     name: String,
     bytes: Vec<u8>,
     format_hint: Option<String>,
 }
 
-impl BlobAudioSource {
-    /// Fetch the blob now and wrap it as an `AudioSource`.
+impl BucketAudioSource {
+    /// Fetch the bucket now and wrap it as an `AudioSource`.
     ///
-    /// Returns `Error::Blob("not_found: ...")` if the key is missing.
-    pub async fn fetch<B: BlobStore + ?Sized>(
+    /// Returns `Error::Bucket("not_found: ...")` if the key is missing.
+    pub async fn fetch<B: Bucket + ?Sized>(
         store: &B,
         key: &str,
         format_hint: Option<String>,
@@ -83,7 +83,7 @@ impl BlobAudioSource {
         let bytes = store
             .get(key)
             .await?
-            .ok_or_else(|| Error::Blob(format!("not_found: {key}")))?;
+            .ok_or_else(|| Error::Bucket(format!("not_found: {key}")))?;
         Ok(Self {
             name: key.to_string(),
             bytes,
@@ -101,7 +101,7 @@ impl BlobAudioSource {
     }
 }
 
-impl AudioSource for BlobAudioSource {
+impl AudioSource for BucketAudioSource {
     fn name(&self) -> &str {
         &self.name
     }
@@ -114,10 +114,10 @@ impl AudioSource for BlobAudioSource {
     }
 }
 
-/// Detect whether an error from `BlobAudioSource::fetch` (or `BlobStore::get`
+/// Detect whether an error from `BucketAudioSource::fetch` (or `Bucket::get`
 /// callers using the same convention) is a missing-key error.
 pub fn is_not_found(err: &Error) -> bool {
-    matches!(err, Error::Blob(msg) if msg.starts_with("not_found:"))
+    matches!(err, Error::Bucket(msg) if msg.starts_with("not_found:"))
 }
 
 fn extension_of(key: &str) -> Option<String> {
@@ -143,7 +143,7 @@ mod tests {
 
     #[test]
     fn from_bytes_reads_back() {
-        let s = BlobAudioSource::from_bytes("test", vec![1, 2, 3], Some("oga".into()));
+        let s = BucketAudioSource::from_bytes("test", vec![1, 2, 3], Some("oga".into()));
         assert_eq!(s.name(), "test");
         let raw = s.read().unwrap();
         assert_eq!(raw.bytes, vec![1, 2, 3]);
@@ -152,9 +152,9 @@ mod tests {
 
     #[test]
     fn error_classification() {
-        assert!(is_not_found(&Error::Blob("not_found: x".into())));
-        assert!(!is_not_found(&Error::Blob("other".into())));
-        assert!(is_already_exists(&Error::Blob("already_exists: x".into())));
-        assert!(!is_already_exists(&Error::Blob("not_found: x".into())));
+        assert!(is_not_found(&Error::Bucket("not_found: x".into())));
+        assert!(!is_not_found(&Error::Bucket("other".into())));
+        assert!(is_already_exists(&Error::Bucket("already_exists: x".into())));
+        assert!(!is_already_exists(&Error::Bucket("not_found: x".into())));
     }
 }

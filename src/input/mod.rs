@@ -4,8 +4,8 @@
 //!
 //! 1. [`InputDriver`] -- top-level "how the application is fed". Each driver
 //!    owns its execution model: [`file::FileDriver`] is one-shot (process one
-//!    file, exit); `queue::QueueDriver` is a long-running daemon loop
-//!    (pop job -> fetch blob -> pipeline -> ack/notify). Selected at startup
+//!    file, exit); `queue::QueueDriver` is a long-running queue loop
+//!    (pop job -> fetch bucket -> pipeline -> ack/notify). Selected at startup
 //!    from CLI flag or config.
 //!
 //! 2. [`AudioSource`] -- low-level "give me bytes of one audio". Used inside
@@ -32,7 +32,7 @@ pub trait InputDriver {
     /// Execute the driver until completion.
     ///
     /// - One-shot drivers return after processing their single item.
-    /// - Daemon drivers return only on graceful shutdown (SIGTERM) or a
+    /// - Long-running drivers return only on graceful shutdown (SIGTERM) or a
     ///   fatal, non-recoverable error.
     fn run(&mut self) -> Result<()>;
 }

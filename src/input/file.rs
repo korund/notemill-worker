@@ -34,7 +34,7 @@ impl AudioSource for LocalFileSource {
 }
 
 /// One-shot driver: process a single local file and exit. Selected when the
-/// user passes `--file <path>`; bypasses the queue/blob layers entirely so
+/// user passes `--file <path>`; bypasses the queue/bucket layers entirely so
 /// the standalone debugging path stays self-contained.
 pub struct FileDriver {
     path: PathBuf,

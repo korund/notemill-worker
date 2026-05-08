@@ -365,7 +365,7 @@ impl ProcessedStore for SqliteProcessedStore {
 
 fn error_code_str(c: ErrorCode) -> &'static str {
     match c {
-        ErrorCode::BlobMissing => "blob_missing",
+        ErrorCode::AudioMissing => "audio_missing",
         ErrorCode::DecodeFailed => "decode_failed",
         ErrorCode::EngineFailed => "engine_failed",
         ErrorCode::OutputFailed => "output_failed",
@@ -375,7 +375,7 @@ fn error_code_str(c: ErrorCode) -> &'static str {
 
 fn parse_error_code(s: &str) -> Result<ErrorCode> {
     Ok(match s {
-        "blob_missing" => ErrorCode::BlobMissing,
+        "audio_missing" => ErrorCode::AudioMissing,
         "decode_failed" => ErrorCode::DecodeFailed,
         "engine_failed" => ErrorCode::EngineFailed,
         "output_failed" => ErrorCode::OutputFailed,

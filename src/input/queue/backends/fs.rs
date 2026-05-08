@@ -1,6 +1,6 @@
-//! Filesystem `BlobStore` backend.
+//! Filesystem `Bucket` backend.
 //!
-//! Maps `blob_key` directly under a configured root directory. Used for the
+//! Maps `audio_key` directly under a configured root directory. Used for the
 //! local docker-compose deployment where bot and worker share a volume.
 //! Behaviour matches contract section 5.2.
 
@@ -12,20 +12,20 @@ use sha2::{Digest, Sha256};
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 
-use crate::input::queue::blob::{BlobMeta, BlobStore};
+use crate::input::queue::bucket::{BucketMeta, Bucket};
 use crate::{Error, Result};
 
 #[derive(Clone)]
-pub struct FsBlobStore {
+pub struct FsBucket {
     root: PathBuf,
 }
 
-impl FsBlobStore {
+impl FsBucket {
     /// Bind to a directory. Created if missing.
     pub fn open(root: impl Into<PathBuf>) -> Result<Self> {
         let root = root.into();
         std::fs::create_dir_all(&root)
-            .map_err(|e| Error::Blob(format!("create root {}: {e}", root.display())))?;
+            .map_err(|e| Error::Bucket(format!("create root {}: {e}", root.display())))?;
         Ok(Self { root })
     }
 
@@ -41,27 +41,27 @@ impl FsBlobStore {
 
 fn validate_key(key: &str) -> Result<()> {
     if key.is_empty() {
-        return Err(Error::Blob("empty key".into()));
+        return Err(Error::Bucket("empty key".into()));
     }
     if key.starts_with('/') || key.contains('\\') {
-        return Err(Error::Blob(format!("invalid key: {key:?}")));
+        return Err(Error::Bucket(format!("invalid key: {key:?}")));
     }
     let p = Path::new(key);
     for c in p.components() {
         match c {
             Component::Normal(_) => {}
             // RootDir / CurDir / ParentDir / Prefix are all rejected.
-            _ => return Err(Error::Blob(format!("invalid key: {key:?}"))),
+            _ => return Err(Error::Bucket(format!("invalid key: {key:?}"))),
         }
     }
     Ok(())
 }
 
 fn map_io(e: std::io::Error, ctx: &str) -> Error {
-    Error::Blob(format!("{ctx}: {e}"))
+    Error::Bucket(format!("{ctx}: {e}"))
 }
 
-impl BlobStore for FsBlobStore {
+impl Bucket for FsBucket {
     fn put(&self, key: &str, bytes: &[u8]) -> impl Future<Output = Result<()>> + Send {
         // Capture by value before crossing await boundaries.
         let path = self.resolve(key);
@@ -72,7 +72,7 @@ impl BlobStore for FsBlobStore {
                 .await
                 .map_err(|e| map_io(e, "stat"))?
             {
-                return Err(Error::Blob(format!(
+                return Err(Error::Bucket(format!(
                     "already_exists: {}",
                     path.display()
                 )));
@@ -129,7 +129,7 @@ impl BlobStore for FsBlobStore {
         }
     }
 
-    fn head(&self, key: &str) -> impl Future<Output = Result<Option<BlobMeta>>> + Send {
+    fn head(&self, key: &str) -> impl Future<Output = Result<Option<BucketMeta>>> + Send {
         let path = self.resolve(key);
         async move {
             let path = path?;
@@ -139,12 +139,12 @@ impl BlobStore for FsBlobStore {
                 Err(e) => return Err(map_io(e, "stat")),
             };
             // ETag is sha256 over current file contents. Cheap for short
-            // audio blobs; if this becomes hot, cache to xattr.
+            // audio buckets; if this becomes hot, cache to xattr.
             let bytes = fs::read(&path).await.map_err(|e| map_io(e, "read"))?;
             let mut h = Sha256::new();
             h.update(&bytes);
             let etag = hex::encode(h.finalize());
-            Ok(Some(BlobMeta {
+            Ok(Some(BucketMeta {
                 size: meta.len(),
                 etag,
             }))
@@ -174,7 +174,7 @@ mod tests {
     fn tmp_root() -> PathBuf {
         let mut p = std::env::temp_dir();
         p.push(format!(
-            "voice2text-fsblob-{}-{}",
+            "voice2text-fsbucket-{}-{}",
             std::process::id(),
             rand_suffix()
         ));
@@ -197,7 +197,7 @@ mod tests {
         let rt = rt();
         let root = tmp_root();
         rt.block_on(async {
-            let store = FsBlobStore::open(&root).unwrap();
+            let store = FsBucket::open(&root).unwrap();
             let key = "audio/2026/05/07/abc.oga";
 
             assert!(store.get(key).await.unwrap().is_none());
@@ -213,7 +213,7 @@ mod tests {
 
             // put twice -> AlreadyExists.
             let err = store.put(key, b"again").await.unwrap_err();
-            assert!(matches!(err, Error::Blob(ref m) if m.starts_with("already_exists:")));
+            assert!(matches!(err, Error::Bucket(ref m) if m.starts_with("already_exists:")));
 
             store.delete(key).await.unwrap();
             assert!(store.get(key).await.unwrap().is_none());
@@ -228,7 +228,7 @@ mod tests {
         let rt = rt();
         let root = tmp_root();
         rt.block_on(async {
-            let store = FsBlobStore::open(&root).unwrap();
+            let store = FsBucket::open(&root).unwrap();
             assert!(store.put("../escape", b"x").await.is_err());
             assert!(store.get("/abs").await.is_err());
         });

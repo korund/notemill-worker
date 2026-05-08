@@ -20,8 +20,8 @@ pub enum Error {
     #[error("queue error: {0}")]
     Queue(String),
 
-    #[error("blob error: {0}")]
-    Blob(String),
+    #[error("bucket error: {0}")]
+    Bucket(String),
 
     #[error("config error: {0}")]
     Config(String),

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use crate::cli::{CommonRunArgs, Sink};
 use crate::config::Config;
-use crate::input::queue::backends::fs::FsBlobStore;
+use crate::input::queue::backends::fs::FsBucket;
 use crate::input::queue::backends::sqlite::SqliteBackend;
 use crate::input::queue::job::{NotifyResult, TranscribeJob};
 use crate::input::queue::{JobProcessor, QueueDriver, QueueDriverConfig};
@@ -63,7 +63,7 @@ pub fn run(common: CommonRunArgs) -> Result<()> {
     let family = resolve::family(&cfg, common.model_family)?;
     let model_handle = manager.resolve(&model_name, family)?;
 
-    let (sqlite_path, blob_root, max_receive, visibility_sec, poll_interval_ms) =
+    let (sqlite_path, bucket_root, max_receive, visibility_sec, poll_interval_ms) =
         resolve_queue_infra(&cfg)?;
 
     let sink_kind = resolve::sink(&cfg, common.output, Sink::Couchdb);
@@ -82,18 +82,18 @@ pub fn run(common: CommonRunArgs) -> Result<()> {
     let notify_q: crate::input::queue::backends::sqlite::SqliteQueue<NotifyResult> =
         sqlite.queue("notifications", max_receive)?;
     let processed = sqlite.processed_store();
-    let blob = FsBlobStore::open(&blob_root)?;
+    let bucket = FsBucket::open(&bucket_root)?;
 
     let driver_cfg = QueueDriverConfig {
         visibility_sec,
         poll_interval: std::time::Duration::from_millis(poll_interval_ms),
     };
     let mut driver =
-        QueueDriver::new(transcribe_q, notify_q, blob, processed, processor, driver_cfg);
+        QueueDriver::new(transcribe_q, notify_q, bucket, processed, processor, driver_cfg);
     driver.run()
 }
 
-/// Returns (sqlite_path, blob_root, max_receive, visibility_sec, poll_interval_ms).
+/// Returns (sqlite_path, bucket_root, max_receive, visibility_sec, poll_interval_ms).
 fn resolve_queue_infra(cfg: &Config) -> Result<(PathBuf, PathBuf, u32, u32, u64)> {
     let input_cfg = cfg
         .input
@@ -131,7 +131,7 @@ fn resolve_queue_infra(cfg: &Config) -> Result<(PathBuf, PathBuf, u32, u32, u64)
         .ok_or_else(|| Error::Config("input.queue.sqlite missing".into()))?
         .path
         .clone();
-    let blob_root = bucket
+    let bucket_root = bucket
         .fs
         .as_ref()
         .ok_or_else(|| Error::Config("input.queue.bucket.fs missing".into()))?
@@ -139,7 +139,7 @@ fn resolve_queue_infra(cfg: &Config) -> Result<(PathBuf, PathBuf, u32, u32, u64)
         .clone();
     Ok((
         sqlite_path,
-        blob_root,
+        bucket_root,
         infra_q.max_receive,
         infra_q.visibility_timeout_sec,
         infra_q.poll_interval_ms,

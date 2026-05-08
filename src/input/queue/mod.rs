@@ -1,21 +1,21 @@
-//! Queue-driven input mode (daemon).
+//! Queue-driven input mode.
 //!
-//! `QueueDriver` is the main loop for worker containers in the daemon
-//! deployment: pop a `TranscribeJob`, fetch the blob, run the pipeline,
+//! `QueueDriver` is the main loop for worker containers in queue mode
+//! deployment: pop a `TranscribeJob`, fetch the bucket, run the pipeline,
 //! record idempotency, send a `NotifyResult`, ack. Shutdown on SIGTERM /
 //! ctrl_c lets the current job finish before exit.
 //!
 //! Layout:
 //! - `job` -- wire-format types (TranscribeJob, NotifyResult).
 //! - `transport` -- `Queue<T>` trait + DLQ semantics.
-//! - `blob` -- `BlobStore` trait + `BlobAudioSource` adapter.
+//! - `bucket` -- `Bucket` trait + `BucketAudioSource` adapter.
 //! - `processed` -- idempotency table.
 //! - `backends` -- sqlite/fs for local deployment; a remote backend may
 //!   plug in later.
 //! - `QueueDriver` (this file) -- main loop wiring all of the above.
 
 pub mod backends;
-pub mod blob;
+pub mod bucket;
 pub mod job;
 pub mod processed;
 pub mod transport;
@@ -29,7 +29,7 @@ use tracing::{debug, error, info, warn};
 use crate::input::{AudioSource, InputDriver};
 use crate::{Error, Result};
 
-use blob::{is_not_found, BlobAudioSource, BlobStore};
+use bucket::{is_not_found, BucketAudioSource, Bucket};
 use job::{
     ErrorCode, JobResult, NotifyKind, NotifyResult, SourceRef, TranscribeJob, WIRE_VERSION,
 };
@@ -65,7 +65,7 @@ impl Default for QueueDriverConfig {
 pub struct QueueDriver<TQ, NQ, B, P, JP> {
     transcribe_q: TQ,
     notify_q: NQ,
-    blob: B,
+    bucket: B,
     processed: P,
     processor: JP,
     cfg: QueueDriverConfig,
@@ -75,14 +75,14 @@ impl<TQ, NQ, B, P, JP> QueueDriver<TQ, NQ, B, P, JP>
 where
     TQ: Queue<TranscribeJob>,
     NQ: Queue<NotifyResult>,
-    B: BlobStore,
+    B: Bucket,
     P: ProcessedStore,
     JP: JobProcessor,
 {
     pub fn new(
         transcribe_q: TQ,
         notify_q: NQ,
-        blob: B,
+        bucket: B,
         processed: P,
         processor: JP,
         cfg: QueueDriverConfig,
@@ -90,7 +90,7 @@ where
         Self {
             transcribe_q,
             notify_q,
-            blob,
+            bucket,
             processed,
             processor,
             cfg,
@@ -102,12 +102,12 @@ impl<TQ, NQ, B, P, JP> InputDriver for QueueDriver<TQ, NQ, B, P, JP>
 where
     TQ: Queue<TranscribeJob>,
     NQ: Queue<NotifyResult>,
-    B: BlobStore,
+    B: Bucket,
     P: ProcessedStore,
     JP: JobProcessor,
 {
     fn run(&mut self) -> Result<()> {
-        // Single-threaded runtime: queue/blob ops are async, but the pipeline
+        // Single-threaded runtime: queue/bucket ops are async, but the pipeline
         // (decoder/engine/sink) is sync and may hold !Send model state. A
         // current-thread runtime keeps the whole loop on one OS thread while
         // still allowing tokio::fs and spawn_blocking under the hood.
@@ -123,7 +123,7 @@ impl<TQ, NQ, B, P, JP> QueueDriver<TQ, NQ, B, P, JP>
 where
     TQ: Queue<TranscribeJob>,
     NQ: Queue<NotifyResult>,
-    B: BlobStore,
+    B: Bucket,
     P: ProcessedStore,
     JP: JobProcessor,
 {
@@ -164,7 +164,7 @@ where
         let receipt = msg.receipt;
         debug!(
             dedup_key = %job.dedup_key,
-            blob_key = %job.blob_key,
+            audio_key = %job.audio_key,
             receive_count = msg.receive_count,
             "popped job"
         );
@@ -219,18 +219,18 @@ where
     }
 
     async fn run_pipeline(&mut self, job: &TranscribeJob) -> std::result::Result<String, PipelineError> {
-        // Fetch blob.
+        // Fetch bucket.
         let format_hint = job.hints.as_ref().and_then(|h| h.mime.clone());
-        let source = match BlobAudioSource::fetch(&self.blob, &job.blob_key, format_hint).await {
+        let source = match BucketAudioSource::fetch(&self.bucket, &job.audio_key, format_hint).await {
             Ok(s) => s,
             Err(e) if is_not_found(&e) => {
                 return Err(PipelineError::Deterministic(
-                    ErrorCode::BlobMissing,
+                    ErrorCode::AudioMissing,
                     format!("{e}"),
                 ));
             }
             Err(e) => {
-                // Other blob errors (I/O, permission) are likely transient.
+                // Other bucket errors (I/O, permission) are likely transient.
                 return Err(PipelineError::Transient(ErrorCode::Internal, format!("{e}")));
             }
         };
@@ -256,9 +256,9 @@ where
             },
         };
         self.processed.record(&rec).await?;
-        // Best-effort blob cleanup; failure here doesn't undo the work.
-        if let Err(e) = self.blob.delete(&job.blob_key).await {
-            warn!(error = %e, blob_key = %job.blob_key, "blob delete failed");
+        // Best-effort bucket cleanup; failure here doesn't undo the work.
+        if let Err(e) = self.bucket.delete(&job.audio_key).await {
+            warn!(error = %e, audio_key = %job.audio_key, "bucket delete failed");
         }
         let notify = NotifyResult {
             v: WIRE_VERSION,
@@ -333,7 +333,7 @@ fn classify(err: &Error, msg: String) -> PipelineError {
         Error::Engine(_) => PipelineError::Deterministic(ErrorCode::EngineFailed, msg),
         Error::Output(_) => PipelineError::Transient(ErrorCode::OutputFailed, msg),
         Error::Io(_) => PipelineError::Transient(ErrorCode::Internal, msg),
-        Error::Blob(_) => PipelineError::Transient(ErrorCode::Internal, msg),
+        Error::Bucket(_) => PipelineError::Transient(ErrorCode::Internal, msg),
         Error::Queue(_) => PipelineError::Transient(ErrorCode::Internal, msg),
         // Config / Model / NotImplemented / Other / Input -- treat as deterministic
         // to avoid hot-looping on a misconfiguration.

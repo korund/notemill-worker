@@ -27,7 +27,7 @@ model:
 
 # --- Input (queue mode only) ---------------------------------------------
 #
-# Queue + blob backends. Currently only the local pair (sqlite + fs) ships;
+# Queue + bucket backends. Currently only the local pair (sqlite + fs) ships;
 # a remote backend may be added later without changing this shape.
 input:
   # Selects which per-driver block below is used. Reserved for future drivers
@@ -52,7 +52,7 @@ input:
       backend: fs
       fs:
         # Directory shared with the bot container via a docker volume.
-        root: /data/blobs
+        root: /data/buckets
 
 # --- Output sinks --------------------------------------------------------
 #
