@@ -15,6 +15,7 @@ use base64::Engine as _;
 use twox_hash::XxHash64;
 
 use crate::config::CouchdbConfig;
+use tracing::info;
 use crate::{Error, Result};
 
 const PROBE_TIMEOUT_SECS: u64 = 15;
@@ -440,7 +441,7 @@ impl CouchdbSink {
 impl super::OutputSink for CouchdbSink {
     fn write(&mut self, text: &str) -> Result<()> {
         let id = write_note(&self.cfg, &self.password, &self.vault_path, text)?;
-        eprintln!("wrote: {}", id);
+        info!(path = %id, "wrote");
         Ok(())
     }
 }

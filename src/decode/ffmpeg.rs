@@ -7,6 +7,7 @@ use ffmpeg_next::util::channel_layout::ChannelLayout;
 use ffmpeg_next::util::frame::audio::Audio;
 
 use crate::input::RawAudio;
+use tracing::warn;
 use crate::{Error, Result};
 
 use super::{Pcm16kMono, TARGET_SAMPLE_RATE};
@@ -146,7 +147,7 @@ pub fn set_log_level(name: &str) {
         "debug" => Level::Debug,
         "trace" => Level::Trace,
         other => {
-            eprintln!("ffmpeg: unknown log_level '{other}', keeping default");
+            warn!(log_level = other, "ffmpeg: unknown log_level, keeping default");
             return;
         }
     };
