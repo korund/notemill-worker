@@ -220,7 +220,7 @@ where
 
     async fn run_pipeline(&mut self, job: &TranscribeJob) -> std::result::Result<String, PipelineError> {
         // Fetch bucket.
-        let format_hint = job.hints.as_ref().and_then(|h| h.mime.clone());
+        let format_hint = job.hints.as_ref().and_then(|h| h.mime.as_deref()).and_then(|mime| mime_guess::get_mime_extensions_str(mime).and_then(|exts| exts.first().copied()).map(str::to_owned));
         let source = match BucketAudioSource::fetch(&self.bucket, &job.audio_key, format_hint).await {
             Ok(s) => s,
             Err(e) if is_not_found(&e) => {
