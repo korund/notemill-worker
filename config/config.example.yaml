@@ -102,3 +102,17 @@ output:
     # Doc-path prefix; each queue job writes to `<target>/<safe dedup_key>.md`.
     # CLI override: --target
     target: Inbox
+
+# --- FFmpeg --------------------------------------------------------------
+#
+# Global FFmpeg library settings, applied once at startup.
+#
+# `log_level` controls how chatty FFmpeg is on stderr:
+#   quiet   - no FFmpeg messages at all
+#   error   - only errors (default; silences harmless ogg/opus warnings
+#             that Telegram voice notes commonly trigger)
+#   warning - errors + warnings
+#   info    - everything FFmpeg normally emits
+#   verbose / debug / trace - increasingly noisy
+ffmpeg:
+  log_level: error

@@ -13,6 +13,8 @@ pub struct Config {
     pub output: OutputConfig,
     #[serde(default)]
     pub input: Option<InputConfig>,
+    #[serde(default)]
+    pub ffmpeg: Option<FfmpegConfig>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -233,5 +235,26 @@ impl CouchdbConfig {
             }
         }
         Ok(None)
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct FfmpegConfig {
+    /// FFmpeg log level: quiet|panic|fatal|error|warning|info|verbose|debug|trace.
+    /// Default: error (silences common ogg/opus warnings on Telegram voice notes).
+    #[serde(default)]
+    pub log_level: Option<String>,
+}
+
+impl Config {
+    /// Apply globals derived from config (FFmpeg log level, etc).
+    /// Call once at startup after Config::load_merged.
+    pub fn apply_globals(&self) {
+        let level = self
+            .ffmpeg
+            .as_ref()
+            .and_then(|f| f.log_level.as_deref())
+            .unwrap_or("error");
+        crate::decode::set_ffmpeg_log_level(level);
     }
 }

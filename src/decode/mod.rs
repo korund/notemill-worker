@@ -46,3 +46,11 @@ impl AudioDecoder for DefaultDecoder {
         ffmpeg::decode_to_pcm16k(raw)
     }
 }
+
+#[cfg(feature = "decode-ffmpeg")]
+pub fn set_ffmpeg_log_level(name: &str) {
+    ffmpeg::set_log_level(name);
+}
+
+#[cfg(not(feature = "decode-ffmpeg"))]
+pub fn set_ffmpeg_log_level(_name: &str) {}

@@ -54,6 +54,7 @@ impl JobProcessor for QueueProcessor {
 pub fn run(common: CommonRunArgs) -> Result<()> {
     let overrides = common.parsed_set_overrides().map_err(Error::Config)?;
     let cfg = Config::load_merged(&common.config, &overrides)?;
+    cfg.apply_globals();
 
     let models_dir = resolve::models_dir(&cfg, common.model_dir);
     let catalog = models::Catalog::load()?;

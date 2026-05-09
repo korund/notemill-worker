@@ -132,3 +132,24 @@ fn extend_f32(frame: &Audio, out: &mut Vec<f32>) {
         out.push(f32::from_ne_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]));
     }
 }
+
+pub fn set_log_level(name: &str) {
+    use ffmpeg::util::log::Level;
+    let level = match name.to_ascii_lowercase().as_str() {
+        "quiet" => Level::Quiet,
+        "panic" => Level::Panic,
+        "fatal" => Level::Fatal,
+        "error" => Level::Error,
+        "warning" | "warn" => Level::Warning,
+        "info" => Level::Info,
+        "verbose" => Level::Verbose,
+        "debug" => Level::Debug,
+        "trace" => Level::Trace,
+        other => {
+            eprintln!("ffmpeg: unknown log_level '{other}', keeping default");
+            return;
+        }
+    };
+    ensure_init();
+    ffmpeg::util::log::set_level(level);
+}
