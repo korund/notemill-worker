@@ -69,8 +69,8 @@ impl InputDriver for FileDriver {
         let pcm = self.decoder.decode(&raw)?;
         let text = self.transcriber.transcribe(&pcm)?;
         let body = match &self.frontmatter {
-            Some(prefix) => format!("{prefix}{text}"),
-            None => text,
+            Some(prefix) => format!("{prefix}{text}\n"),
+            None => format!("{text}\n"),
         };
         self.sink.write(&body)?;
         Ok(())

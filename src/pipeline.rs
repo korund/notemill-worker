@@ -16,8 +16,8 @@ impl Pipeline {
         let pcm = self.decoder.decode(&raw)?;
         let text = self.transcriber.transcribe(&pcm)?;
         let body = match fm {
-            Some(prefix) => format!("{}{}", prefix, text),
-            None => text,
+            Some(prefix) => format!("{}{}\n", prefix, text),
+            None => format!("{}\n", text),
         };
         sink.write(&body)
     }
