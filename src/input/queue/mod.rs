@@ -133,22 +133,30 @@ where
             poll_ms = self.cfg.poll_interval.as_millis() as u64,
             "queue driver started"
         );
+        // Pin once so the signal listener is never dropped between iterations.
+        // Dropping and re-creating ctrl_c() each loop would lose signals that
+        // arrive while no listener is registered.
+        let mut shutdown = std::pin::pin!(wait_shutdown());
         loop {
-            tokio::select! {
+            let had_work = tokio::select! {
                 biased;
-                _ = wait_shutdown() => {
+                _ = &mut shutdown => {
                     info!("shutdown signal received, exiting loop");
                     return Ok(());
                 }
-                step = self.step() => {
-                    match step {
-                        Ok(true) => continue,                         // had work, loop hot
-                        Ok(false) => sleep(self.cfg.poll_interval).await, // idle
-                        Err(e) => {
-                            error!(error = %e, "step failed; backing off");
-                            sleep(self.cfg.poll_interval).await;
-                        }
+                result = self.step() => match result {
+                    Ok(had) => had,
+                    Err(e) => { error!(error = %e, "step failed; backing off"); false }
+                },
+            };
+            if !had_work {
+                tokio::select! {
+                    biased;
+                    _ = &mut shutdown => {
+                        info!("shutdown signal received during idle, exiting loop");
+                        return Ok(());
                     }
+                    _ = sleep(self.cfg.poll_interval) => {}
                 }
             }
         }
@@ -256,10 +264,6 @@ where
             },
         };
         self.processed.record(&rec).await?;
-        // Best-effort bucket cleanup; failure here doesn't undo the work.
-        if let Err(e) = self.bucket.delete(&job.audio_key).await {
-            warn!(error = %e, audio_key = %job.audio_key, "bucket delete failed");
-        }
         let notify = NotifyResult {
             v: WIRE_VERSION,
             kind: NotifyKind::NotifyResult,
@@ -274,6 +278,11 @@ where
             warn!(error = %e, "notify enqueue failed (ok branch)");
         }
         self.transcribe_q.ack(receipt).await?;
+        // Best-effort cleanup after the queue is already clear; leftover audio
+        // can be collected by a future garbage-collection pass.
+        if let Err(e) = self.bucket.delete(&job.audio_key).await {
+            warn!(error = %e, audio_key = %job.audio_key, "bucket delete failed");
+        }
         Ok(())
     }
 
