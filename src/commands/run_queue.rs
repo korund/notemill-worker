@@ -1,7 +1,9 @@
 use std::path::PathBuf;
 
+use chrono::DateTime;
+
 use crate::cli::{CommonRunArgs, Sink};
-use crate::config::Config;
+use crate::config::{Config, NamingConfig};
 use crate::input::queue::backends::fs::FsBucket;
 use crate::input::queue::backends::sqlite::SqliteBackend;
 use crate::input::queue::job::{NotifyResult, TranscribeJob};
@@ -19,12 +21,46 @@ enum QueueSink {
         sink: Box<dyn output::OutputSink>,
         output_ref: String,
     },
-    /// Per-job CouchDB sink; path = prefix/safe_dedup_key.
+    /// Per-job CouchDB sink; path derived from job metadata per NamingConfig.
     Couchdb {
         cdb: crate::config::CouchdbConfig,
         pwd: String,
         prefix: String,
+        naming: NamingConfig,
     },
+}
+
+/// Derive the note file stem (no extension) from a job according to naming config.
+fn note_stem(job: &TranscribeJob, naming: &NamingConfig) -> String {
+    match naming {
+        NamingConfig::MessageId => job.dedup_key.replace(':', "-"),
+        NamingConfig::Datetime { format } => {
+            DateTime::parse_from_rfc3339(&job.source.received_at)
+                .map(|dt| dt.format(format).to_string())
+                .unwrap_or_else(|_| job.dedup_key.replace(':', "-"))
+        }
+    }
+}
+
+/// Find a collision-free `prefix/stem[-N].md` path.
+/// `exists` is called with the lowercase candidate id; returns true if taken.
+fn collision_free_path(
+    prefix: &str,
+    stem: &str,
+    exists: impl Fn(&str) -> Result<bool>,
+) -> Result<String> {
+    let candidate = format!("{prefix}/{stem}.md");
+    if !exists(&candidate.to_lowercase())? {
+        return Ok(candidate);
+    }
+    let mut n = 1u32;
+    loop {
+        let c = format!("{prefix}/{stem}-{n}.md");
+        if !exists(&c.to_lowercase())? {
+            return Ok(c);
+        }
+        n += 1;
+    }
 }
 
 struct QueueProcessor {
@@ -39,10 +75,17 @@ impl JobProcessor for QueueProcessor {
                 self.pipeline.run_one(source, sink.as_mut(), None)?;
                 Ok(output_ref.clone())
             }
-            QueueSink::Couchdb { cdb, pwd, prefix } => {
-                let safe = job.dedup_key.replace(':', "-");
-                // .md so obsidian-livesync surfaces the doc as a regular note in the vault.
-                let path = format!("{}/{}.md", prefix.trim_end_matches('/'), safe);
+            QueueSink::Couchdb { cdb, pwd, prefix, naming } => {
+                let stem = note_stem(job, naming);
+                let pfx = prefix.trim_end_matches('/');
+                // MessageId stems are globally unique by protocol; no collision check needed.
+                let path = if matches!(naming, NamingConfig::Datetime { .. }) {
+                    collision_free_path(pfx, &stem, |id| {
+                        output::couchdb::doc_exists(cdb, pwd, id)
+                    })?
+                } else {
+                    format!("{pfx}/{stem}.md")
+                };
                 let mut sink = output::CouchdbSink::new(cdb.clone(), pwd.clone(), path.clone());
                 self.pipeline.run_one(source, &mut sink, None)?;
                 Ok(format!("couchdb://{path}"))
@@ -55,6 +98,7 @@ pub fn run(common: CommonRunArgs) -> Result<()> {
     let overrides = common.parsed_set_overrides().map_err(Error::Config)?;
     let cfg = Config::load_merged(&common.config, &overrides)?;
     cfg.apply_globals();
+    cfg.output.name.validate()?;
 
     let models_dir = resolve::models_dir(&cfg, common.model_dir);
     let catalog = models::Catalog::load()?;
@@ -181,7 +225,8 @@ fn build_queue_sink(
                 output::couchdb::DEFAULT_PROBE_CHUNKS,
             )?;
             let prefix = resolve::couchdb_target(cfg, cli_target)?;
-            Ok(QueueSink::Couchdb { cdb, pwd, prefix })
+            let naming = cfg.output.name.clone();
+            Ok(QueueSink::Couchdb { cdb, pwd, prefix, naming })
         }
     }
 }

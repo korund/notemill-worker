@@ -70,6 +70,16 @@ output:
   # Active sink. Accepted: stdout | file | couchdb. CLI override: --output
   sink: file
 
+  # How to derive the note file name. Applies only to sinks that create one
+  # file per note (currently: couchdb). Has no effect for file or stdout.
+  # type: message_id  -- tg-{chat_id}-{message_id}  (default, no extra config)
+  # type: datetime    -- format received_at with a chrono strftime string;
+  #                      on collision appends -1, -2, ... before the extension.
+  #                      Use only file-name-safe characters (e.g. %H-%M-%S not %H:%M:%S).
+  name:
+    type: datetime
+    format: %Y-%m-%dT%H-%M-%SZ
+
   # Active when sink: stdout. Unused otherwise.
   stdout:
     # Marker between consecutive writes; written as `\n<separator>\n`.

@@ -100,6 +100,49 @@ pub struct OutputConfig {
     pub file: Option<FileSinkConfig>,
     #[serde(default)]
     pub stdout: Option<StdoutSinkConfig>,
+
+    /// How to derive the note name when writing to a sink that uses a path
+    /// per note (currently: couchdb). Default: MessageId.
+    #[serde(default)]
+    pub name: NamingConfig,
+}
+
+/// Strategy for deriving the note file name.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum NamingConfig {
+    /// `tg-{chat_id}-{message_id}` -- the original behaviour.
+    MessageId,
+    /// Format `received_at` (RFC3339 UTC) with a chrono strftime string.
+    /// On collision a `-1`, `-2`, ... suffix is appended before the extension.
+    Datetime { format: String },
+}
+
+impl Default for NamingConfig {
+    fn default() -> Self {
+        NamingConfig::MessageId
+    }
+}
+
+impl NamingConfig {
+    /// Validate that the naming config is self-consistent.
+    /// For Datetime, rejects format strings containing characters that are
+    /// forbidden in file names on common platforms (Windows + Unix).
+    pub fn validate(&self) -> crate::Result<()> {
+        if let NamingConfig::Datetime { format } = self {
+            // Characters forbidden in Windows file names (also covers Unix '/')
+            const FORBIDDEN: &[char] = &['\\', '/', ':', '*', '?', '"', '<', '>', '|', '\0'];
+            if let Some(bad) = format.chars().find(|c| FORBIDDEN.contains(c)) {
+                return Err(crate::Error::Config(format!(
+                    "output.name.format contains forbidden file-name character {:?}; \
+                     use chrono strftime tokens that produce safe characters only \
+                     (e.g. use %H-%M-%S instead of %H:%M:%S)",
+                    bad
+                )));
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]

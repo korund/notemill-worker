@@ -301,6 +301,23 @@ fn put_main(
     )))
 }
 
+/// Returns true if a CouchDB document with the given id already exists.
+/// Used by the queue worker to detect datetime name collisions before writing.
+pub fn doc_exists(cfg: &CouchdbConfig, password: &str, doc_id: &str) -> Result<bool> {
+    let base = cfg.url.trim_end_matches('/');
+    let db_url = format!("{}/{}", base, cfg.database);
+    let auth = basic_auth(&cfg.username, password);
+    let agent = ureq::AgentBuilder::new()
+        .timeout(std::time::Duration::from_secs(HTTP_TIMEOUT_SECS))
+        .build();
+    let url = format!("{}/{}", db_url, encode_id(doc_id));
+    match agent.head(&url).set("Authorization", &auth).call() {
+        Ok(_) => Ok(true),
+        Err(ureq::Error::Status(404, _)) => Ok(false),
+        Err(e) => Err(Error::Output(format!("couchdb head {doc_id}: {e}"))),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
