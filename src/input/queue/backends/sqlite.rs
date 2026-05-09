@@ -44,6 +44,12 @@ impl SqliteBackend {
     /// `processed_jobs` migration. Per-queue tables are created lazily by
     /// [`SqliteBackend::queue`].
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
+        let path = path.as_ref();
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| {
+                Error::Queue(format!("sqlite: mkdir {}: {e}", parent.display()))
+            })?;
+        }
         let conn = Connection::open(path).map_err(map_err)?;
         // WAL: concurrent readers + single writer, no blocking on read.
         conn.pragma_update(None, "journal_mode", &"WAL").map_err(map_err)?;

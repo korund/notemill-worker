@@ -50,6 +50,10 @@ impl OutputSink for FileSink {
         }
         let prefix = self.state.as_mut().unwrap().next_prefix();
 
+        if let Some(parent) = self.path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| Error::Output(format!("mkdir {}: {e}", parent.display())))?;
+        }
         let mut file = OpenOptions::new()
             .create(true)
             .write(true)
