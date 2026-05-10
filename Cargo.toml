@@ -1,5 +1,5 @@
 [package]
-name = "voice2text"
+name = "notemill-worker"
 version = "0.0.1"
 edition = "2021"
 description = "CLI transcription tool over transcribe-rs (Whisper / Parakeet / GigaAM, GGUF, CPU)"

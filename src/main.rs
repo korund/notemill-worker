@@ -1,7 +1,7 @@
 use clap::Parser;
 use tracing_subscriber::EnvFilter;
-use voice2text::cli::Cli;
-use voice2text::{commands, Result};
+use notemill_worker::cli::Cli;
+use notemill_worker::{commands, Result};
 
 fn main() -> Result<()> {
     init_tracing();

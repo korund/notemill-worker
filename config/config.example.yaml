@@ -1,4 +1,4 @@
-# voice2text configuration
+# Notemill: Worker configuration
 #
 # Fields with value CHANGE_ME must be filled in by the operator manually.
 # Fields with value null are optional; leave as-is if not needed.
@@ -8,11 +8,11 @@
 
 # --- Model ---------------------------------------------------------------
 #
-# Used by `voice2text run file` and `voice2text run queue`.
-# The dedicated `voice2text models list|pull|add` subcommand manages files
+# Used by `notemill-worker run file` and `notemill-worker run queue`.
+# The dedicated `notemill-worker models list|pull|add` subcommand manages files
 # in `model.dir`.
 model:
-  # Model name from the catalog (`voice2text models list`) OR an absolute path
+  # Model name from the catalog (`notemill-worker models list`) OR an absolute path
   # to a model file/directory. For a path, set `family` explicitly.
   # CLI override: --model-name
   name: whisper-medium
@@ -72,7 +72,7 @@ input:
 #   1. File at the path given by `password_file` (recommended for docker secrets)
 #   2. Environment variable named by `password_env` (recommended for compose with .env)
 #
-# Diagnose connectivity / schema with `voice2text couchdb probe`.
+# Diagnose connectivity / schema with `notemill-worker couchdb probe`.
 output:
   # Active sink. Accepted: stdout | file | couchdb. CLI override: --output
   sink: file

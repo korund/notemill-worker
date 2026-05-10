@@ -174,7 +174,7 @@ mod tests {
     fn tmp_root() -> PathBuf {
         let mut p = std::env::temp_dir();
         p.push(format!(
-            "voice2text-fsbucket-{}-{}",
+            "notemill-worker-fsbucket-{}-{}",
             std::process::id(),
             rand_suffix()
         ));

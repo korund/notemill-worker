@@ -1,7 +1,7 @@
 #[cfg(feature = "decode-ffmpeg")]
 mod decode_ffmpeg {
-    use voice2text::decode::{AudioDecoder, DefaultDecoder, TARGET_SAMPLE_RATE};
-    use voice2text::input::RawAudio;
+    use notemill_worker::decode::{AudioDecoder, DefaultDecoder, TARGET_SAMPLE_RATE};
+    use notemill_worker::input::RawAudio;
 
     fn generate_wav_sine(sample_rate: u32, channels: u16, freq_hz: f32, duration_secs: f32) -> Vec<u8> {
         let num_samples = (sample_rate as f32 * duration_secs) as usize;
