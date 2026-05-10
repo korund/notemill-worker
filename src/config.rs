@@ -41,7 +41,6 @@ pub struct InputConfig {
 
 #[derive(Debug, Deserialize)]
 pub struct QueueConfig {
-    /// "sqlite" (local). Remote backends are out of scope for this build.
     pub backend: String,
     #[serde(default)]
     pub sqlite: Option<SqliteQueueConfig>,
@@ -49,13 +48,30 @@ pub struct QueueConfig {
     pub visibility_timeout_sec: u32,
     #[serde(default = "default_max_receive")]
     pub max_receive: u32,
-    #[serde(default = "default_poll_ms")]
-    pub poll_interval_ms: u64,
-
-    /// Storage for the actual audio bytes the queue points to (claim-check).
-    /// Specific to the queue driver; other drivers carry payload differently.
+    #[serde(default)]
+    pub model: ModelLoopConfig,
     #[serde(default)]
     pub bucket: Option<BucketConfig>,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+pub struct ModelLoopConfig {
+    #[serde(default = "default_loaded_loop_ms")]
+    pub loaded_loop_ms: u64,
+    #[serde(default = "default_unloaded_loop_ms")]
+    pub unloaded_loop_ms: u64,
+    #[serde(default = "default_unload_after_ms")]
+    pub unload_after_ms: u64,
+}
+
+impl Default for ModelLoopConfig {
+    fn default() -> Self {
+        Self {
+            loaded_loop_ms: default_loaded_loop_ms(),
+            unloaded_loop_ms: default_unloaded_loop_ms(),
+            unload_after_ms: default_unload_after_ms(),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -82,8 +98,14 @@ fn default_visibility_sec() -> u32 {
 fn default_max_receive() -> u32 {
     5
 }
-fn default_poll_ms() -> u64 {
+fn default_loaded_loop_ms() -> u64 {
     1000
+}
+fn default_unloaded_loop_ms() -> u64 {
+    60_000
+}
+fn default_unload_after_ms() -> u64 {
+    300_000
 }
 
 #[derive(Debug, Deserialize)]

@@ -43,8 +43,15 @@ input:
     visibility_timeout_sec: 300
     # After this many redeliveries the message is moved to the DLQ table.
     max_receive: 5
-    # Idle poll interval for the SQLite backend.
-    poll_interval_ms: 1000
+
+    # Model lifecycle: lazy load on first job, unload after idle period.
+    model:
+      # Queue poll interval while the model is in memory.
+      loaded_loop_ms: 1000
+      # Queue poll interval after the model has been unloaded.
+      unloaded_loop_ms: 60000
+      # Unload the model after this many ms without work.
+      unload_after_ms: 300000
 
     # Where the actual audio bytes live (claim-check pattern: queue carries
     # metadata + reference, bucket holds the payload). Queue-driver-specific.

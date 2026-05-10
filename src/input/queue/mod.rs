@@ -43,21 +43,27 @@ use transport::Queue;
 /// Returns the `output_ref` written into the sink (e.g. the CouchDB doc id),
 /// which is propagated into `NotifyResult` and `processed_jobs`.
 pub trait JobProcessor {
-    fn process(&mut self, source: &dyn AudioSource, job: &TranscribeJob) -> Result<String>;
+    fn process(
+        &mut self,
+        pipeline: &mut crate::pipeline::Pipeline,
+        source: &dyn AudioSource,
+        job: &TranscribeJob,
+    ) -> Result<String>;
 }
 
-/// Tunables for the main loop. Defaults follow contract section 4.4.
 #[derive(Debug, Clone)]
 pub struct QueueDriverConfig {
     pub visibility_sec: u32,
-    pub poll_interval: Duration,
+    pub loaded_loop: Duration,
+    pub unloaded_loop: Duration,
 }
 
 impl Default for QueueDriverConfig {
     fn default() -> Self {
         Self {
             visibility_sec: 300,
-            poll_interval: Duration::from_millis(1000),
+            loaded_loop: Duration::from_millis(1000),
+            unloaded_loop: Duration::from_millis(60_000),
         }
     }
 }
@@ -68,6 +74,7 @@ pub struct QueueDriver<TQ, NQ, B, P, JP> {
     bucket: B,
     processed: P,
     processor: JP,
+    guard: crate::pipeline::ModelGuard,
     cfg: QueueDriverConfig,
 }
 
@@ -85,6 +92,7 @@ where
         bucket: B,
         processed: P,
         processor: JP,
+        guard: crate::pipeline::ModelGuard,
         cfg: QueueDriverConfig,
     ) -> Self {
         Self {
@@ -93,6 +101,7 @@ where
             bucket,
             processed,
             processor,
+            guard,
             cfg,
         }
     }
@@ -130,12 +139,10 @@ where
     async fn run_loop(&mut self) -> Result<()> {
         info!(
             visibility_sec = self.cfg.visibility_sec,
-            poll_ms = self.cfg.poll_interval.as_millis() as u64,
+            loaded_loop_ms = self.cfg.loaded_loop.as_millis() as u64,
+            unloaded_loop_ms = self.cfg.unloaded_loop.as_millis() as u64,
             "queue driver started"
         );
-        // Pin once so the signal listener is never dropped between iterations.
-        // Dropping and re-creating ctrl_c() each loop would lose signals that
-        // arrive while no listener is registered.
         let mut shutdown = std::pin::pin!(wait_shutdown());
         loop {
             let had_work = tokio::select! {
@@ -150,13 +157,19 @@ where
                 },
             };
             if !had_work {
+                self.guard.try_unload();
+                let interval = if self.guard.is_loaded() {
+                    self.cfg.loaded_loop
+                } else {
+                    self.cfg.unloaded_loop
+                };
                 tokio::select! {
                     biased;
                     _ = &mut shutdown => {
                         info!("shutdown signal received during idle, exiting loop");
                         return Ok(());
                     }
-                    _ = sleep(self.cfg.poll_interval) => {}
+                    _ = sleep(interval) => {}
                 }
             }
         }
@@ -242,8 +255,11 @@ where
                 return Err(PipelineError::Transient(ErrorCode::Internal, format!("{e}")));
             }
         };
-        // Run pipeline (sync). Map errors to deterministic/transient buckets.
-        match self.processor.process(&source, job) {
+        // Load model on demand; map errors to deterministic/transient buckets.
+        let pipeline = self.guard.acquire().map_err(|e| {
+            PipelineError::Transient(ErrorCode::Internal, format!("model load: {e}"))
+        })?;
+        match self.processor.process(pipeline, &source, job) {
             Ok(out) => Ok(out),
             Err(e) => Err(classify(&e, e.to_string())),
         }

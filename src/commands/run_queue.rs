@@ -9,7 +9,7 @@ use crate::input::queue::backends::sqlite::SqliteBackend;
 use crate::input::queue::job::{NotifyResult, TranscribeJob};
 use crate::input::queue::{JobProcessor, QueueDriver, QueueDriverConfig};
 use crate::input::{AudioSource, InputDriver};
-use crate::pipeline::Pipeline;
+use crate::pipeline::{ModelGuard, Pipeline};
 use crate::{decode, engine, models, output, Error, Result};
 
 use super::resolve;
@@ -64,21 +64,24 @@ fn collision_free_path(
 }
 
 struct QueueProcessor {
-    pipeline: Pipeline,
     queue_sink: QueueSink,
 }
 
 impl JobProcessor for QueueProcessor {
-    fn process(&mut self, source: &dyn AudioSource, job: &TranscribeJob) -> Result<String> {
+    fn process(
+        &mut self,
+        pipeline: &mut Pipeline,
+        source: &dyn AudioSource,
+        job: &TranscribeJob,
+    ) -> Result<String> {
         match &mut self.queue_sink {
             QueueSink::Shared { sink, output_ref } => {
-                self.pipeline.run_one(source, sink.as_mut(), None)?;
+                pipeline.run_one(source, sink.as_mut(), None)?;
                 Ok(output_ref.clone())
             }
             QueueSink::Couchdb { cdb, pwd, prefix, naming } => {
                 let stem = note_stem(job, naming);
                 let pfx = prefix.trim_end_matches('/');
-                // MessageId stems are globally unique by protocol; no collision check needed.
                 let path = if matches!(naming, NamingConfig::Datetime { .. }) {
                     collision_free_path(pfx, &stem, |id| {
                         output::couchdb::doc_exists(cdb, pwd, id)
@@ -87,7 +90,7 @@ impl JobProcessor for QueueProcessor {
                     format!("{pfx}/{stem}.md")
                 };
                 let mut sink = output::CouchdbSink::new(cdb.clone(), pwd.clone(), path.clone());
-                self.pipeline.run_one(source, &mut sink, None)?;
+                pipeline.run_one(source, &mut sink, None)?;
                 Ok(format!("couchdb://{path}"))
             }
         }
@@ -108,18 +111,23 @@ pub fn run(common: CommonRunArgs) -> Result<()> {
     let family = resolve::family(&cfg, common.model_family)?;
     let model_handle = manager.resolve(&model_name, family)?;
 
-    let (sqlite_path, bucket_root, max_receive, visibility_sec, poll_interval_ms) =
+    let (sqlite_path, bucket_root, max_receive, visibility_sec, model_loop) =
         resolve_queue_infra(&cfg)?;
 
     let sink_kind = resolve::sink(&cfg, common.output, Sink::Couchdb);
 
     let queue_sink = build_queue_sink(sink_kind, common.target, common.overwrite, &cfg)?;
 
-    let pipeline = Pipeline {
-        decoder: Box::new(decode::DefaultDecoder::new()),
-        transcriber: engine::build(&model_handle)?,
-    };
-    let processor = QueueProcessor { pipeline, queue_sink };
+    let guard = ModelGuard::new(
+        Box::new(move || {
+            Ok(Pipeline {
+                decoder: Box::new(decode::DefaultDecoder::new()),
+                transcriber: engine::build(&model_handle)?,
+            })
+        }),
+        std::time::Duration::from_millis(model_loop.unload_after_ms),
+    );
+    let processor = QueueProcessor { queue_sink };
 
     let sqlite = SqliteBackend::open(&sqlite_path)?;
     let transcribe_q: crate::input::queue::backends::sqlite::SqliteQueue<TranscribeJob> =
@@ -131,15 +139,17 @@ pub fn run(common: CommonRunArgs) -> Result<()> {
 
     let driver_cfg = QueueDriverConfig {
         visibility_sec,
-        poll_interval: std::time::Duration::from_millis(poll_interval_ms),
+        loaded_loop: std::time::Duration::from_millis(model_loop.loaded_loop_ms),
+        unloaded_loop: std::time::Duration::from_millis(model_loop.unloaded_loop_ms),
     };
     let mut driver =
-        QueueDriver::new(transcribe_q, notify_q, bucket, processed, processor, driver_cfg);
+        QueueDriver::new(transcribe_q, notify_q, bucket, processed, processor, guard, driver_cfg);
     driver.run()
 }
 
-/// Returns (sqlite_path, bucket_root, max_receive, visibility_sec, poll_interval_ms).
-fn resolve_queue_infra(cfg: &Config) -> Result<(PathBuf, PathBuf, u32, u32, u64)> {
+fn resolve_queue_infra(
+    cfg: &Config,
+) -> Result<(PathBuf, PathBuf, u32, u32, crate::config::ModelLoopConfig)> {
     let input_cfg = cfg
         .input
         .as_ref()
@@ -187,7 +197,7 @@ fn resolve_queue_infra(cfg: &Config) -> Result<(PathBuf, PathBuf, u32, u32, u64)
         bucket_root,
         infra_q.max_receive,
         infra_q.visibility_timeout_sec,
-        infra_q.poll_interval_ms,
+        infra_q.model,
     ))
 }
 
