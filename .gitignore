@@ -3,8 +3,9 @@
 Cargo.lock.bak
 
 # Local only assets
-/config/.cache
-/config/config.yaml
+/config/*
+!/config/config.example.yaml
+!/config/models.toml
 /models/*
 !/models/.gitkeep
 

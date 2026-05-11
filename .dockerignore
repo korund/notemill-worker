@@ -1,8 +1,9 @@
 target/
 models/
 samples/
-config/config.yaml
-config/.cache
+config/*
+!config/config.example.yaml
+!config/models.toml
 .git/
 .idea/
 .vscode/
