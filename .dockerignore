@@ -1,0 +1,12 @@
+target/
+models/
+samples/
+config/config.yaml
+config/.cache
+.git/
+.idea/
+.vscode/
+.claude/
+*.iml
+*.swp
+.DS_Store
