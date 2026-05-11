@@ -11,6 +11,8 @@
 
 mod catalog;
 mod manager;
+mod registry;
 
 pub use catalog::{Catalog, CatalogEntry, ModelFamily};
 pub use manager::{Manager, ResolvedModel};
+pub use registry::{ModelRegistry, ModelStatus};

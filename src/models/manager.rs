@@ -27,6 +27,10 @@ impl Manager {
         &self.dir
     }
 
+    pub fn catalog(&self) -> &Catalog {
+        &self.catalog
+    }
+
     /// Print to stdout: catalog entries and locally present files/directories.
     pub fn print_list(&self) {
         println!("Catalog:");

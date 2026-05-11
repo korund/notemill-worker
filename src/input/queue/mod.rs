@@ -27,6 +27,7 @@ use tokio::time::sleep;
 use tracing::{debug, error, info, warn};
 
 use crate::input::{AudioSource, InputDriver};
+use crate::models::{ModelRegistry, ModelStatus};
 use crate::{Error, Result};
 
 use bucket::{is_not_found, BucketAudioSource, Bucket};
@@ -76,6 +77,9 @@ pub struct QueueDriver<TQ, NQ, B, P, JP> {
     processor: JP,
     guard: crate::pipeline::ModelGuard,
     cfg: QueueDriverConfig,
+    registry: ModelRegistry,
+    model_name: String,
+    model_load_failures: u32,
 }
 
 impl<TQ, NQ, B, P, JP> QueueDriver<TQ, NQ, B, P, JP>
@@ -94,6 +98,8 @@ where
         processor: JP,
         guard: crate::pipeline::ModelGuard,
         cfg: QueueDriverConfig,
+        registry: ModelRegistry,
+        model_name: String,
     ) -> Self {
         Self {
             transcribe_q,
@@ -103,6 +109,9 @@ where
             processor,
             guard,
             cfg,
+            registry,
+            model_name,
+            model_load_failures: 0,
         }
     }
 }
@@ -230,17 +239,31 @@ where
                     .await?;
             }
             Err(PipelineError::Transient(code, msg)) => {
-                // Send notify (best effort) but DO NOT ack: visibility timeout
-                // will redeliver the message for retry.
                 self.finalise_error(&job, &receipt, code, msg, duration_ms, false)
                     .await?;
+            }
+            Err(PipelineError::ModelNotReady) => {
+                debug!(dedup_key = %job.dedup_key, "model not ready, nacking job");
+                // Do not ack — visibility timeout will redeliver.
+            }
+            Err(PipelineError::ModelFatal(msg)) => {
+                self.model_load_failures += 1;
+                if self.model_load_failures >= 3 {
+                    error!(model = %self.model_name, "model failed {n} times, shutting down", n = self.model_load_failures);
+                    return Err(Error::Model(msg));
+                }
+                warn!(model = %self.model_name, attempt = self.model_load_failures, "model init failed, will retry");
             }
         }
         Ok(true)
     }
 
     async fn run_pipeline(&mut self, job: &TranscribeJob) -> std::result::Result<String, PipelineError> {
-        // Fetch bucket.
+        match self.registry.get(&self.model_name) {
+            Some(ModelStatus::Ready(_)) | None => {}
+            Some(ModelStatus::Pulling) => return Err(PipelineError::ModelNotReady),
+            Some(ModelStatus::Failed(msg)) => return Err(PipelineError::ModelFatal(msg)),
+        }
         let format_hint = job.hints.as_ref().and_then(|h| h.mime.as_deref()).and_then(|mime| mime_guess::get_mime_extensions_str(mime).and_then(|exts| exts.first().copied()).map(str::to_owned));
         let source = match BucketAudioSource::fetch(&self.bucket, &job.audio_key, format_hint).await {
             Ok(s) => s,
@@ -255,7 +278,6 @@ where
                 return Err(PipelineError::Transient(ErrorCode::Internal, format!("{e}")));
             }
         };
-        // Load model on demand; map errors to deterministic/transient buckets.
         let pipeline = self.guard.acquire().map_err(|e| {
             PipelineError::Transient(ErrorCode::Internal, format!("model load: {e}"))
         })?;
@@ -346,6 +368,10 @@ enum PipelineError {
     Deterministic(ErrorCode, String),
     /// Likely succeeds on retry (e.g. transient I/O). Do not ack.
     Transient(ErrorCode, String),
+    /// Model not yet available (still pulling). Silently nack; no notify.
+    ModelNotReady,
+    /// Model failed to initialize after retries. Fatal.
+    ModelFatal(String),
 }
 
 /// Classify a pipeline `Error` into a deterministic vs transient bucket.

@@ -11,6 +11,7 @@ use crate::input::queue::{JobProcessor, QueueDriver, QueueDriverConfig};
 use crate::input::{AudioSource, InputDriver};
 use crate::pipeline::{ModelGuard, Pipeline};
 use crate::{decode, engine, models, output, Error, Result};
+use models::{ModelRegistry, ModelStatus};
 
 use super::resolve;
 
@@ -105,11 +106,16 @@ pub fn run(common: CommonRunArgs) -> Result<()> {
 
     let models_dir = resolve::models_dir(&cfg, common.model_dir);
     let catalog = models::Catalog::load()?;
-    let manager = models::Manager::new(models_dir, catalog);
+    let manager = std::sync::Arc::new(models::Manager::new(models_dir, catalog));
 
     let model_name = resolve::model_name(&cfg, common.model_name)?;
     let family = resolve::family(&cfg, common.model_family)?;
-    let model_handle = manager.resolve(&model_name, family)?;
+
+    let registry = ModelRegistry::new();
+    registry.init_models(
+        std::sync::Arc::clone(&manager),
+        vec![(model_name.clone(), family)],
+    );
 
     let (sqlite_path, bucket_root, max_receive, visibility_sec, model_loop) =
         resolve_queue_infra(&cfg)?;
@@ -118,12 +124,21 @@ pub fn run(common: CommonRunArgs) -> Result<()> {
 
     let queue_sink = build_queue_sink(sink_kind, common.target, common.overwrite, &cfg)?;
 
+    let reg_for_guard = registry.clone();
+    let guard_model_name = model_name.clone();
     let guard = ModelGuard::new(
         Box::new(move || {
-            Ok(Pipeline {
-                decoder: Box::new(decode::DefaultDecoder::new()),
-                transcriber: engine::build(&model_handle)?,
-            })
+            let status = reg_for_guard.get(&guard_model_name).ok_or_else(|| {
+                Error::Model(format!("model `{}` not in registry", guard_model_name))
+            })?;
+            match status {
+                ModelStatus::Ready(handle) => Ok(Pipeline {
+                    decoder: Box::new(decode::DefaultDecoder::new()),
+                    transcriber: engine::build(&handle)?,
+                }),
+                ModelStatus::Pulling => Err(Error::Model("model still downloading".into())),
+                ModelStatus::Failed(msg) => Err(Error::Model(msg)),
+            }
         }),
         std::time::Duration::from_millis(model_loop.unload_after_ms),
     );
@@ -143,7 +158,7 @@ pub fn run(common: CommonRunArgs) -> Result<()> {
         unloaded_loop: std::time::Duration::from_millis(model_loop.unloaded_loop_ms),
     };
     let mut driver =
-        QueueDriver::new(transcribe_q, notify_q, bucket, processed, processor, guard, driver_cfg);
+        QueueDriver::new(transcribe_q, notify_q, bucket, processed, processor, guard, driver_cfg, registry, model_name);
     driver.run()
 }
 
