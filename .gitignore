@@ -6,6 +6,7 @@ Cargo.lock.bak
 /config/*
 !/config/config.example.yaml
 !/config/models.toml
+/lib/*
 /models/*
 !/models/.gitkeep
 
