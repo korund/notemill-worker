@@ -35,13 +35,10 @@ pub enum Command {
         cmd: RunCommand,
     },
 
-    /// Model management: list / pull / add.
-    Models {
-        /// Models directory. Default: ./models.
-        #[arg(long)]
-        dir: Option<PathBuf>,
+    /// Diagnostics and maintenance commands.
+    Admin {
         #[command(subcommand)]
-        cmd: ModelsCommand,
+        cmd: AdminCommand,
     },
 
     /// Decode an audio file to PCM 16 kHz mono and print stats (no engine needed).
@@ -52,7 +49,10 @@ pub enum Command {
         #[arg(long)]
         output: Option<PathBuf>,
     },
+}
 
+#[derive(Debug, Subcommand)]
+pub enum AdminCommand {
     /// CouchDB output diagnostics and operations.
     Couchdb {
         #[command(subcommand)]
@@ -63,6 +63,15 @@ pub enum Command {
     Queue {
         #[command(subcommand)]
         cmd: QueueCommand,
+    },
+
+    /// Model management: list / pull / add.
+    Models {
+        /// Models directory. Default: ./models.
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        #[command(subcommand)]
+        cmd: ModelsCommand,
     },
 }
 

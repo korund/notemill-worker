@@ -13,7 +13,7 @@ use crate::pipeline::{ModelGuard, Pipeline};
 use crate::{decode, engine, models, output, Error, Result};
 use models::{ModelRegistry, ModelStatus};
 
-use super::resolve;
+use crate::commands::resolve;
 
 enum QueueSink {
     /// Shared persistent sink (file or stdout). The sink itself handles any

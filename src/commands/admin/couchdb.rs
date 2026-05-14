@@ -4,7 +4,7 @@ use crate::cli::CouchdbCommand;
 use crate::config::Config;
 use crate::{output, Result};
 
-use super::resolve;
+use crate::commands::resolve;
 
 pub fn run(cmd: CouchdbCommand) -> Result<()> {
     match cmd {

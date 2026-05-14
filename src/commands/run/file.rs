@@ -5,7 +5,7 @@ use crate::config::Config;
 use crate::pipeline::Pipeline;
 use crate::{decode, engine, input, models, output, Error, Result};
 
-use super::resolve;
+use crate::commands::resolve;
 
 pub fn run(
     common: CommonRunArgs,
