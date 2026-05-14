@@ -22,6 +22,6 @@ fn probe(config: Option<PathBuf>, limit: usize, chunks: usize) -> Result<()> {
     println!("hash_algo : {}", state.hash_algo);
     println!("e2ee      : {}", state.e2ee);
     println!("obfuscated: {}", state.path_obfuscation);
-    println!("cached at config/.cache/livesync.yaml");
+    println!("cached at .cache/livesync.yaml");
     Ok(())
 }

@@ -1,6 +1,6 @@
 //! Persistent runtime state: detected LiveSync schema cache.
 //!
-//! File: `config/.cache/livesync.yaml`. Auto-managed; never edit by hand.
+//! File: `.cache/livesync.yaml`. Auto-managed; never edit by hand.
 
 use std::path::Path;
 
@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 use crate::config::CouchdbConfig;
 use crate::{Error, Result};
 
-const STATE_PATH: &str = "config/.cache/livesync.yaml";
+const STATE_PATH: &str = ".cache/livesync.yaml";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LivesyncState {
@@ -34,7 +34,7 @@ impl LivesyncState {
         serde_yaml::from_str(&raw).ok()
     }
 
-    /// Atomically save state to `config/.cache/livesync.yaml`.
+    /// Atomically save state to `.cache/livesync.yaml`.
     pub fn save(&self) -> Result<()> {
         let path = Path::new(STATE_PATH);
         if let Some(parent) = path.parent() {
