@@ -218,6 +218,20 @@ where
         })
         .await
     }
+
+    async fn nack_with_delay(&self, receipt: &Receipt, delay_sec: u32) -> Result<()> {
+        let id = parse_id(receipt)?;
+        let conn = self.conn.clone();
+        let name = self.name.clone();
+        let target = now_ms() + (delay_sec as i64) * 1000;
+        blocking(move || {
+            let c = conn.lock().expect("sqlite mutex poisoned");
+            let sql = format!("UPDATE queue_{name} SET visible_at = ?1 WHERE id = ?2");
+            c.execute(&sql, params![target, id]).map_err(map_err)?;
+            Ok(())
+        })
+        .await
+    }
 }
 
 fn parse_id(receipt: &Receipt) -> Result<i64> {
@@ -270,6 +284,13 @@ fn pop_blocking(
                 .map_err(map_err)?;
             let del = format!("DELETE FROM queue_{name} WHERE id = ?1");
             tx.execute(&del, params![id]).map_err(map_err)?;
+            tracing::warn!(
+                queue = %name,
+                row_id = id,
+                receive_count = receive_count,
+                max_receive = max_receive,
+                "promoted to DLQ"
+            );
             continue;
         }
         let upd = format!(

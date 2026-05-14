@@ -86,4 +86,13 @@ where
     /// Equivalent to letting the visibility timeout expire, but without the
     /// wait. Idempotent.
     fn nack(&self, receipt: &Receipt) -> impl Future<Output = Result<()>> + Send;
+
+    /// Return a popped message to the queue with a delayed retry. The
+    /// message becomes visible again after `delay_sec` seconds. Used to
+    /// implement exponential backoff on transient failures. Idempotent.
+    fn nack_with_delay(
+        &self,
+        receipt: &Receipt,
+        delay_sec: u32,
+    ) -> impl Future<Output = Result<()>> + Send;
 }

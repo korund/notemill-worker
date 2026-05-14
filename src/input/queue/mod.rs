@@ -192,6 +192,7 @@ where
         };
         let job = msg.payload;
         let receipt = msg.receipt;
+        let msg_receive_count = msg.receive_count;
         debug!(
             dedup_key = %job.dedup_key,
             audio_key = %job.audio_key,
@@ -235,11 +236,11 @@ where
                     .await?;
             }
             Err(PipelineError::Deterministic(code, msg)) => {
-                self.finalise_error(&job, &receipt, code, msg, duration_ms, true)
+                self.finalise_error(&job, &receipt, code, msg, duration_ms, true, msg_receive_count)
                     .await?;
             }
             Err(PipelineError::Transient(code, msg)) => {
-                self.finalise_error(&job, &receipt, code, msg, duration_ms, false)
+                self.finalise_error(&job, &receipt, code, msg, duration_ms, false, msg_receive_count)
                     .await?;
             }
             Err(PipelineError::ModelNotReady) => {
@@ -332,6 +333,7 @@ where
         msg: String,
         duration_ms: u64,
         ack: bool,
+        receive_count: u32,
     ) -> Result<()> {
         if ack {
             // Persist deterministic outcome so duplicates can be absorbed.
@@ -358,9 +360,21 @@ where
         }
         if ack {
             self.transcribe_q.ack(receipt).await?;
+        } else {
+            let delay = next_visibility_sec(receive_count);
+            self.transcribe_q.nack_with_delay(receipt, delay).await?;
         }
         Ok(())
     }
+}
+
+/// Exponential backoff for transient retries: 10s -> 6h cap.
+/// `receive_count` is 1 on the first attempt.
+fn next_visibility_sec(receive_count: u32) -> u32 {
+    const BASE: u32 = 10;
+    const CAP: u32 = 6 * 60 * 60;
+    let shift = receive_count.saturating_sub(1).min(31);
+    BASE.saturating_mul(1u32 << shift).min(CAP)
 }
 
 enum PipelineError {
@@ -384,7 +398,7 @@ fn classify(err: &Error, msg: String) -> PipelineError {
         Error::Engine(_) => PipelineError::Deterministic(ErrorCode::EngineFailed, msg),
         Error::Output(_) => PipelineError::Transient(ErrorCode::OutputFailed, msg),
         Error::Io(_) => PipelineError::Transient(ErrorCode::Internal, msg),
-        Error::Bucket(_) => PipelineError::Transient(ErrorCode::Internal, msg),
+        Error::Bucket(_) => PipelineError::Deterministic(ErrorCode::Internal, msg),
         Error::Queue(_) => PipelineError::Transient(ErrorCode::Internal, msg),
         // Config / Model / NotImplemented / Other / Input -- treat as deterministic
         // to avoid hot-looping on a misconfiguration.

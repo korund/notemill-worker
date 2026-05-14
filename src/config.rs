@@ -96,7 +96,8 @@ fn default_visibility_sec() -> u32 {
     300
 }
 fn default_max_receive() -> u32 {
-    5
+    // ~3 days of transient retries with 10s -> 6h backoff.
+    23
 }
 fn default_loaded_loop_ms() -> u64 {
     1000
