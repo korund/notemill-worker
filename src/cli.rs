@@ -58,6 +58,12 @@ pub enum Command {
         #[command(subcommand)]
         cmd: CouchdbCommand,
     },
+
+    /// Queue maintenance: DLQ inspection and requeue.
+    Queue {
+        #[command(subcommand)]
+        cmd: QueueCommand,
+    },
 }
 
 /// Flags shared by `run file` and `run queue`.
@@ -169,5 +175,50 @@ pub enum CouchdbCommand {
         limit: usize,
         #[arg(long, default_value_t = 3)]
         chunks: usize,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum QueueCommand {
+    /// Dead-letter queue operations.
+    Dlq {
+        #[command(subcommand)]
+        cmd: DlqCommand,
+    },
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum, Default)]
+pub enum QueueName {
+    #[default]
+    Transcribe,
+    Notifications,
+}
+
+impl QueueName {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            QueueName::Transcribe => "transcribe",
+            QueueName::Notifications => "notifications",
+        }
+    }
+}
+
+#[derive(Debug, Subcommand)]
+pub enum DlqCommand {
+    /// List rows currently in the DLQ.
+    List {
+        #[arg(long, default_value = "config/config.yaml")]
+        config: PathBuf,
+        #[arg(long, value_enum, default_value_t = QueueName::Transcribe)]
+        queue: QueueName,
+    },
+    /// Move a DLQ row back to the main queue. Resets receive_count to 0.
+    Requeue {
+        #[arg(long, default_value = "config/config.yaml")]
+        config: PathBuf,
+        #[arg(long, value_enum, default_value_t = QueueName::Transcribe)]
+        queue: QueueName,
+        /// DLQ row id (see `dlq list`).
+        id: i64,
     },
 }

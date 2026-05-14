@@ -8,6 +8,7 @@ use crate::Result;
 mod couchdb;
 mod decode;
 mod models;
+mod queue;
 mod resolve;
 mod run_file;
 mod run_queue;
@@ -16,6 +17,7 @@ pub fn dispatch(cli: Cli) -> Result<()> {
     match cli.command {
         Command::Models { dir, cmd } => models::run(dir, cmd),
         Command::Couchdb { cmd } => couchdb::run(cmd),
+        Command::Queue { cmd } => queue::run(cmd),
         Command::Decode { input, output } => decode::run(input, output),
         Command::Run { cmd } => match cmd {
             RunCommand::File { common, input, frontmatter } => {

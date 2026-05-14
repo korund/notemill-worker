@@ -88,6 +88,69 @@ impl SqliteBackend {
             conn: self.conn.clone(),
         }
     }
+
+    /// List rows currently in the dead-letter table for `queue_name`.
+    pub fn dlq_list(&self, queue_name: &str) -> Result<Vec<DlqRow>> {
+        let qn = sanitize_name(queue_name)?;
+        let c = self.conn.lock().expect("sqlite mutex poisoned");
+        let sql = format!(
+            "SELECT id, enqueued_at, moved_at, receive_count, payload \
+             FROM queue_{qn}_dlq ORDER BY id"
+        );
+        let mut stmt = c.prepare(&sql).map_err(map_err)?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok(DlqRow {
+                    id: r.get(0)?,
+                    enqueued_at_ms: r.get(1)?,
+                    moved_at_ms: r.get(2)?,
+                    receive_count: r.get(3)?,
+                    payload: r.get(4)?,
+                })
+            })
+            .map_err(map_err)?;
+        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(map_err)
+    }
+
+    /// Move a single DLQ row back to the main queue with `receive_count` reset
+    /// to 0 and immediate visibility. Original `enqueued_at` is preserved.
+    pub fn dlq_requeue(&self, queue_name: &str, id: i64) -> Result<()> {
+        let qn = sanitize_name(queue_name)?;
+        let ddl = queue_ddl(&qn);
+        let mut c = self.conn.lock().expect("sqlite mutex poisoned");
+        c.execute_batch(&ddl).map_err(map_err)?;
+        let tx = c
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            .map_err(map_err)?;
+        let now = now_ms();
+        let sel = format!("SELECT payload, enqueued_at FROM queue_{qn}_dlq WHERE id = ?1");
+        let row: Option<(String, i64)> = tx
+            .query_row(&sel, params![id], |r| Ok((r.get(0)?, r.get(1)?)))
+            .optional()
+            .map_err(map_err)?;
+        let Some((payload, enqueued_at)) = row else {
+            return Err(Error::Queue(format!("dlq row {id} not found in {qn}")));
+        };
+        let ins = format!(
+            "INSERT INTO queue_{qn} (payload, enqueued_at, visible_at, receive_count) \
+             VALUES (?1, ?2, ?3, 0)"
+        );
+        tx.execute(&ins, params![payload, enqueued_at, now])
+            .map_err(map_err)?;
+        let del = format!("DELETE FROM queue_{qn}_dlq WHERE id = ?1");
+        tx.execute(&del, params![id]).map_err(map_err)?;
+        tx.commit().map_err(map_err)?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DlqRow {
+    pub id: i64,
+    pub enqueued_at_ms: i64,
+    pub moved_at_ms: i64,
+    pub receive_count: u32,
+    pub payload: String,
 }
 
 fn queue_ddl(qn: &str) -> String {
