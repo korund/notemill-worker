@@ -416,8 +416,9 @@ pub const DEFAULT_PROBE_CHUNKS: usize = 3;
 /// If `force` is true, always re-probe. Otherwise, use cached state when
 /// the connection fingerprint matches.
 ///
-/// On a cache miss / mismatch / `force`, runs a probe, prints the dump,
-/// classifies the schema, and writes the state file.
+/// On a cache miss / mismatch / `force`, runs a probe, classifies the schema,
+/// and writes the state file. Does not print: callers wanting a human-readable
+/// dump should invoke `probe` + `print_probe` + `classify` + `save` directly.
 pub fn ensure_state(
     cfg: &CouchdbConfig,
     password: &str,
@@ -434,7 +435,6 @@ pub fn ensure_state(
         }
     }
     let p = probe(cfg, password, sample_limit, chunk_limit)?;
-    print_probe(&p);
     let state = classify(&p, fp)?;
     state.save()?;
     Ok(state)

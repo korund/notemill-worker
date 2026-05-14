@@ -46,13 +46,20 @@ pub fn run(
         }
         Sink::Couchdb => {
             let (cdb, pwd) = resolve::load_couchdb_config(&cfg)?;
-            let _state = output::couchdb::ensure_state(
+            let state = output::couchdb::ensure_state(
                 &cdb,
                 &pwd,
                 false,
                 output::couchdb::DEFAULT_PROBE_LIMIT,
                 output::couchdb::DEFAULT_PROBE_CHUNKS,
             )?;
+            tracing::info!(
+                schema = %state.schema,
+                hash_algo = %state.hash_algo,
+                e2ee = state.e2ee,
+                obfuscated = state.path_obfuscation,
+                "couchdb livesync state ensured"
+            );
             let target = resolve::couchdb_target(&cfg, common.target)?;
             Box::new(output::CouchdbSink::new(cdb, pwd, target))
         }
