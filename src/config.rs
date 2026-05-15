@@ -224,6 +224,17 @@ impl Config {
         Self::load_merged(path, &[])
     }
 
+    /// Parse a Config from a YAML string, applying --set overrides. Used by `load_merged`
+    /// and by tests that exercise the parser without touching the filesystem.
+    pub fn from_str(yaml: &str, overrides: &[(String, String)]) -> Result<Self> {
+        let mut value: serde_yaml::Value =
+            serde_yaml::from_str(yaml).map_err(|e| Error::Config(format!("parse: {e}")))?;
+        for (key, val_str) in overrides {
+            set_dotted_key(&mut value, key, val_str)?;
+        }
+        serde_yaml::from_value(value).map_err(|e| Error::Config(format!("parse: {e}")))
+    }
+
     /// Load config from YAML, then apply --set key=value overrides (dotted keys, YAML scalars).
     pub fn load_merged(path: &Path, overrides: &[(String, String)]) -> Result<Self> {
         let raw = std::fs::read_to_string(path).map_err(|e| {
@@ -311,6 +322,9 @@ pub struct FfmpegConfig {
     #[serde(default)]
     pub log_level: Option<String>,
 }
+
+#[cfg(test)]
+mod tests;
 
 impl Config {
     /// Apply globals derived from config (FFmpeg log level, etc).

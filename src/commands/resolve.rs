@@ -113,3 +113,6 @@ pub fn file_separator(cfg: &Config) -> Option<String> {
 pub fn stdout_separator(cfg: &Config) -> Option<String> {
     cfg.output.stdout.as_ref().and_then(|s| s.separator.clone())
 }
+
+#[cfg(test)]
+mod tests;

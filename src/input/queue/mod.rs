@@ -437,3 +437,6 @@ async fn wait_shutdown() {
         let _ = tokio::signal::ctrl_c().await;
     }
 }
+
+#[cfg(test)]
+mod tests;

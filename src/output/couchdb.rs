@@ -327,16 +327,7 @@ pub fn doc_exists(cfg: &CouchdbConfig, password: &str, doc_id: &str) -> Result<b
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn chunk_id_matches_livesync_known_sample() {
-        // Verified against a real chunk from a Self-hosted LiveSync DB.
-        let data = "Tunic\nOuter wilds\nThe witness ";
-        assert_eq!(chunk_id_for(data), "h:1u7m29jltqpqd");
-    }
-}
+mod tests;
 
 /// Validate a probe against expected schema (LiveSync, plaintext, modern
 /// children-array + eden) and return a fresh state record. Errors out with

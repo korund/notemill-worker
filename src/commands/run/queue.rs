@@ -261,3 +261,6 @@ fn build_queue_sink(
         }
     }
 }
+
+#[cfg(test)]
+mod tests;
