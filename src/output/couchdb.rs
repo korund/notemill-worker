@@ -301,6 +301,14 @@ fn put_main(
     )))
 }
 
+/// Build the CouchDB doc path for a note: `<prefix>/<stem>.md`, with any
+/// trailing slash on `prefix` collapsed so users may write either
+/// `target: Notes/Voice` or `target: Notes/Voice/` in YAML without effect.
+/// Pure helper; `stem` is expected to already be safe for use in a path.
+pub fn doc_path(prefix: &str, stem: &str) -> String {
+    format!("{}/{stem}.md", prefix.trim_end_matches('/'))
+}
+
 /// Returns true if a CouchDB document with the given id already exists.
 /// Used by the queue worker to detect datetime name collisions before writing.
 pub fn doc_exists(cfg: &CouchdbConfig, password: &str, doc_id: &str) -> Result<bool> {

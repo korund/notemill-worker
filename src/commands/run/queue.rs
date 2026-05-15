@@ -50,13 +50,13 @@ fn collision_free_path(
     stem: &str,
     exists: impl Fn(&str) -> Result<bool>,
 ) -> Result<String> {
-    let candidate = format!("{prefix}/{stem}.md");
+    let candidate = output::couchdb::doc_path(prefix, stem);
     if !exists(&candidate.to_lowercase())? {
         return Ok(candidate);
     }
     let mut n = 1u32;
     loop {
-        let c = format!("{prefix}/{stem}-{n}.md");
+        let c = output::couchdb::doc_path(prefix, &format!("{stem}-{n}"));
         if !exists(&c.to_lowercase())? {
             return Ok(c);
         }
@@ -82,13 +82,12 @@ impl JobProcessor for QueueProcessor {
             }
             QueueSink::Couchdb { cdb, pwd, prefix, naming } => {
                 let stem = note_stem(job, naming);
-                let pfx = prefix.trim_end_matches('/');
                 let path = if matches!(naming, NamingConfig::Datetime { .. }) {
-                    collision_free_path(pfx, &stem, |id| {
+                    collision_free_path(prefix, &stem, |id| {
                         output::couchdb::doc_exists(cdb, pwd, id)
                     })?
                 } else {
-                    format!("{pfx}/{stem}.md")
+                    output::couchdb::doc_path(prefix, &stem)
                 };
                 let mut sink = output::CouchdbSink::new(cdb.clone(), pwd.clone(), path.clone());
                 pipeline.run_one(source, &mut sink, None)?;
