@@ -8,9 +8,11 @@ mod queue;
 
 pub fn run(cmd: RunCommand) -> Result<()> {
     match cmd {
-        RunCommand::File { common, input, frontmatter } => {
-            file::run(common, input, frontmatter)
-        }
+        RunCommand::File {
+            common,
+            input,
+            frontmatter,
+        } => file::run(common, input, frontmatter),
         RunCommand::Queue { common } => queue::run(common),
     }
 }

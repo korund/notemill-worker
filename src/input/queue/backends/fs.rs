@@ -12,7 +12,7 @@ use sha2::{Digest, Sha256};
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 
-use crate::input::queue::bucket::{BucketMeta, Bucket};
+use crate::input::queue::bucket::{Bucket, BucketMeta};
 use crate::{Error, Result};
 
 #[derive(Clone)]
@@ -68,14 +68,8 @@ impl Bucket for FsBucket {
         let bytes = bytes.to_vec();
         async move {
             let path = path?;
-            if fs::try_exists(&path)
-                .await
-                .map_err(|e| map_io(e, "stat"))?
-            {
-                return Err(Error::Bucket(format!(
-                    "already_exists: {}",
-                    path.display()
-                )));
+            if fs::try_exists(&path).await.map_err(|e| map_io(e, "stat"))? {
+                return Err(Error::Bucket(format!("already_exists: {}", path.display())));
             }
             if let Some(parent) = path.parent() {
                 fs::create_dir_all(parent)
@@ -84,11 +78,7 @@ impl Bucket for FsBucket {
             }
             // Random-suffixed tmp file to avoid clashes with concurrent puts on
             // unrelated keys that share the parent dir.
-            let tmp = path.with_extension(format!(
-                "tmp.{}.{}",
-                std::process::id(),
-                rand_suffix()
-            ));
+            let tmp = path.with_extension(format!("tmp.{}.{}", std::process::id(), rand_suffix()));
             {
                 let mut f = fs::File::create(&tmp)
                     .await

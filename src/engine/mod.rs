@@ -1,7 +1,7 @@
 use crate::decode::Pcm16kMono;
-use crate::models::ResolvedModel;
 #[cfg(feature = "engine-transcribe")]
 use crate::models::ModelFamily;
+use crate::models::ResolvedModel;
 use crate::{Error, Result};
 
 pub trait Transcriber {

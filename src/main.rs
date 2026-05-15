@@ -1,7 +1,7 @@
 use clap::Parser;
-use tracing_subscriber::EnvFilter;
 use notemill_worker::cli::Cli;
 use notemill_worker::{commands, Result};
+use tracing_subscriber::EnvFilter;
 
 fn main() -> Result<()> {
     init_tracing();

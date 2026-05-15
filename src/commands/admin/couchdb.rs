@@ -8,7 +8,11 @@ use crate::commands::resolve;
 
 pub fn run(cmd: CouchdbCommand) -> Result<()> {
     match cmd {
-        CouchdbCommand::Probe { config, limit, chunks } => probe(config, limit, chunks),
+        CouchdbCommand::Probe {
+            config,
+            limit,
+            chunks,
+        } => probe(config, limit, chunks),
     }
 }
 

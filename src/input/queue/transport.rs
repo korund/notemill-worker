@@ -74,10 +74,7 @@ where
     ///
     /// Long-polling vs short-polling is a backend choice; SQLite polls,
     /// a remote backend may long-poll natively.
-    fn pop(
-        &self,
-        visibility_sec: u32,
-    ) -> impl Future<Output = Result<Option<Message<T>>>> + Send;
+    fn pop(&self, visibility_sec: u32) -> impl Future<Output = Result<Option<Message<T>>>> + Send;
 
     /// Mark a popped message as successfully processed. Idempotent.
     fn ack(&self, receipt: &Receipt) -> impl Future<Output = Result<()>> + Send;

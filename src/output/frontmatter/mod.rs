@@ -52,7 +52,8 @@ pub fn render_from_spec(spec: &str) -> Option<String> {
 fn yaml_scalar(s: &str) -> String {
     let first = s.chars().next();
     let needs_quote = s.is_empty()
-        || s.chars().any(|c| matches!(c, ':' | '#' | '\n' | '\r' | '"' | '\''))
+        || s.chars()
+            .any(|c| matches!(c, ':' | '#' | '\n' | '\r' | '"' | '\''))
         || matches!(
             first,
             Some('-' | '?' | '*' | '&' | '|' | '>' | '!' | '%' | '@' | '`' | '[' | '{')

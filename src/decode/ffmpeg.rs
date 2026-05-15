@@ -7,8 +7,8 @@ use ffmpeg_next::util::channel_layout::ChannelLayout;
 use ffmpeg_next::util::frame::audio::Audio;
 
 use crate::input::RawAudio;
-use tracing::warn;
 use crate::{Error, Result};
+use tracing::warn;
 
 use super::{Pcm16kMono, TARGET_SAMPLE_RATE};
 
@@ -25,7 +25,11 @@ pub fn decode_to_pcm16k(raw: &RawAudio) -> Result<Pcm16kMono> {
 
     let tmp_dir = std::env::temp_dir();
     let ext = raw.format_hint.as_deref().unwrap_or("bin");
-    let tmp_path = tmp_dir.join(format!("nc_decode_{}_{}.{ext}", std::process::id(), format!("{:?}", std::thread::current().id())));
+    let tmp_path = tmp_dir.join(format!(
+        "nc_decode_{}_{}.{ext}",
+        std::process::id(),
+        format!("{:?}", std::thread::current().id())
+    ));
     std::fs::write(&tmp_path, &raw.bytes)
         .map_err(|e| Error::Decode(format!("write temp file: {e}")))?;
 

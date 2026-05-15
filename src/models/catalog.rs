@@ -33,7 +33,6 @@ pub enum ModelFamily {
     GigaAm,
 }
 
-
 #[derive(Debug, Deserialize, Serialize)]
 struct CatalogFile {
     #[serde(rename = "model", default)]

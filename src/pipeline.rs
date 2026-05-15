@@ -63,7 +63,10 @@ impl ModelGuard {
         let Some(last) = self.last_used else { return };
         if last.elapsed() >= self.idle_timeout {
             if self.pipeline.is_some() {
-                info!(idle_ms = last.elapsed().as_millis() as u64, "unloading model");
+                info!(
+                    idle_ms = last.elapsed().as_millis() as u64,
+                    "unloading model"
+                );
                 self.pipeline = None;
                 self.last_used = None;
             }

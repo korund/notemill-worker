@@ -35,11 +35,9 @@ enum QueueSink {
 fn note_stem(job: &TranscribeJob, naming: &NamingConfig) -> String {
     match naming {
         NamingConfig::MessageId => job.dedup_key.replace(':', "-"),
-        NamingConfig::Datetime { format } => {
-            DateTime::parse_from_rfc3339(&job.source.received_at)
-                .map(|dt| dt.format(format).to_string())
-                .unwrap_or_else(|_| job.dedup_key.replace(':', "-"))
-        }
+        NamingConfig::Datetime { format } => DateTime::parse_from_rfc3339(&job.source.received_at)
+            .map(|dt| dt.format(format).to_string())
+            .unwrap_or_else(|_| job.dedup_key.replace(':', "-")),
     }
 }
 
@@ -80,7 +78,12 @@ impl JobProcessor for QueueProcessor {
                 pipeline.run_one(source, sink.as_mut(), None)?;
                 Ok(output_ref.clone())
             }
-            QueueSink::Couchdb { cdb, pwd, prefix, naming } => {
+            QueueSink::Couchdb {
+                cdb,
+                pwd,
+                prefix,
+                naming,
+            } => {
                 let stem = note_stem(job, naming);
                 let path = if matches!(naming, NamingConfig::Datetime { .. }) {
                     collision_free_path(prefix, &stem, |id| {
@@ -156,8 +159,17 @@ pub fn run(common: CommonRunArgs) -> Result<()> {
         loaded_loop: std::time::Duration::from_millis(model_loop.loaded_loop_ms),
         unloaded_loop: std::time::Duration::from_millis(model_loop.unloaded_loop_ms),
     };
-    let mut driver =
-        QueueDriver::new(transcribe_q, notify_q, bucket, processed, processor, guard, driver_cfg, registry, model_name);
+    let mut driver = QueueDriver::new(
+        transcribe_q,
+        notify_q,
+        bucket,
+        processed,
+        processor,
+        guard,
+        driver_cfg,
+        registry,
+        model_name,
+    );
     driver.run()
 }
 
@@ -223,7 +235,9 @@ fn build_queue_sink(
 ) -> Result<QueueSink> {
     match sink_kind {
         Sink::Stdout => Ok(QueueSink::Shared {
-            sink: Box::new(output::StdoutSink::new().with_separator(resolve::stdout_separator(cfg))),
+            sink: Box::new(
+                output::StdoutSink::new().with_separator(resolve::stdout_separator(cfg)),
+            ),
             output_ref: "stdout://".to_string(),
         }),
         Sink::File => {
@@ -257,7 +271,12 @@ fn build_queue_sink(
             );
             let prefix = resolve::couchdb_target(cfg, cli_target)?;
             let naming = cfg.output.name.clone();
-            Ok(QueueSink::Couchdb { cdb, pwd, prefix, naming })
+            Ok(QueueSink::Couchdb {
+                cdb,
+                pwd,
+                prefix,
+                naming,
+            })
         }
     }
 }

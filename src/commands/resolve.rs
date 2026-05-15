@@ -99,7 +99,12 @@ pub fn file_path(cfg: &Config, cli: Option<String>) -> Result<String> {
 
 /// File sink overwrite flag: CLI `--overwrite` forces true, else `output.file.overwrite`.
 pub fn file_overwrite(cfg: &Config, cli: bool) -> bool {
-    cli || cfg.output.file.as_ref().map(|f| f.overwrite).unwrap_or(false)
+    cli || cfg
+        .output
+        .file
+        .as_ref()
+        .map(|f| f.overwrite)
+        .unwrap_or(false)
 }
 
 /// File sink separator marker, taken from `output.file.separator`.

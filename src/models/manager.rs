@@ -36,7 +36,11 @@ impl Manager {
         println!("Catalog:");
         for entry in self.catalog.entries() {
             let local = self.dir.join(&entry.filename);
-            let mark = if local.exists() { "[present]" } else { "[remote]" };
+            let mark = if local.exists() {
+                "[present]"
+            } else {
+                "[remote]"
+            };
             let kind = if entry.is_directory { "dir" } else { "file" };
             println!(
                 "  {mark} {name:<20} family={family:?} kind={kind} fs={file}",
@@ -219,8 +223,7 @@ impl Manager {
             .filter(|s| !s.is_empty())
             .ok_or_else(|| Error::Model("cannot determine filename from URL".into()))?;
 
-        let is_directory =
-            url_filename.ends_with(".tar.gz") || url_filename.ends_with(".tgz");
+        let is_directory = url_filename.ends_with(".tar.gz") || url_filename.ends_with(".tgz");
 
         let filename = if is_directory {
             url_filename
@@ -245,8 +248,7 @@ impl Manager {
         std::fs::create_dir_all(&self.dir)
             .map_err(|e| Error::Model(format!("create models dir: {e}")))?;
 
-        let (sha256, size_bytes) =
-            add_download(url, &name, is_directory, &filename, &self.dir)?;
+        let (sha256, size_bytes) = add_download(url, &name, is_directory, &filename, &self.dir)?;
 
         let entry = CatalogEntry {
             name: name.clone(),
@@ -414,7 +416,12 @@ fn download_file(entry: &CatalogEntry, dest: &Path) -> Result<()> {
         .enable_all()
         .build()
         .map_err(|e| Error::Model(format!("tokio runtime: {e}")))?;
-    runtime.block_on(download_to_path(&entry.name, &entry.url, entry.size_bytes, dest))
+    runtime.block_on(download_to_path(
+        &entry.name,
+        &entry.url,
+        entry.size_bytes,
+        dest,
+    ))
 }
 
 /// Download and extract a tar.gz model.

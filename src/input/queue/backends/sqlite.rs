@@ -46,16 +46,18 @@ impl SqliteBackend {
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref();
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| {
-                Error::Queue(format!("sqlite: mkdir {}: {e}", parent.display()))
-            })?;
+            std::fs::create_dir_all(parent)
+                .map_err(|e| Error::Queue(format!("sqlite: mkdir {}: {e}", parent.display())))?;
         }
         let conn = Connection::open(path).map_err(map_err)?;
         // WAL: concurrent readers + single writer, no blocking on read.
-        conn.pragma_update(None, "journal_mode", &"WAL").map_err(map_err)?;
+        conn.pragma_update(None, "journal_mode", &"WAL")
+            .map_err(map_err)?;
         // Wait up to 5s on a locked DB before erroring; covers brief WAL checkpoints.
-        conn.pragma_update(None, "busy_timeout", 5000i64).map_err(map_err)?;
-        conn.pragma_update(None, "synchronous", &"NORMAL").map_err(map_err)?;
+        conn.pragma_update(None, "busy_timeout", 5000i64)
+            .map_err(map_err)?;
+        conn.pragma_update(None, "synchronous", &"NORMAL")
+            .map_err(map_err)?;
         conn.execute_batch(PROCESSED_DDL).map_err(map_err)?;
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -178,9 +180,7 @@ CREATE TABLE IF NOT EXISTS queue_{qn}_dlq (
 fn sanitize_name(name: &str) -> Result<String> {
     let ok = !name.is_empty()
         && name.len() <= 64
-        && name
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_');
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
     if !ok {
         return Err(Error::Queue(format!("invalid queue name: {name:?}")));
     }
@@ -384,15 +384,7 @@ impl ProcessedStore for SqliteProcessedStore {
                     "SELECT dedup_key, finished_at, status, output_ref, error_code \
                      FROM processed_jobs WHERE dedup_key = ?1",
                     params![dk],
-                    |r| {
-                        Ok((
-                            r.get(0)?,
-                            r.get(1)?,
-                            r.get(2)?,
-                            r.get(3)?,
-                            r.get(4)?,
-                        ))
-                    },
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
                 )
                 .optional()
                 .map_err(map_err)?;

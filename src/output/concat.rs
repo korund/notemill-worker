@@ -19,7 +19,10 @@ impl SeparatorState {
     /// content before the sink starts writing (e.g. an existing non-empty file
     /// in append mode), so the first write is also separated from prior data.
     pub fn new(sep: Option<String>, initially_primed: bool) -> Self {
-        Self { sep, primed: initially_primed }
+        Self {
+            sep,
+            primed: initially_primed,
+        }
     }
 
     /// Returns the prefix to write before the next chunk, advancing state.

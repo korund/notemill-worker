@@ -3,7 +3,12 @@ mod decode_ffmpeg {
     use notemill_worker::decode::{AudioDecoder, DefaultDecoder, TARGET_SAMPLE_RATE};
     use notemill_worker::input::RawAudio;
 
-    fn generate_wav_sine(sample_rate: u32, channels: u16, freq_hz: f32, duration_secs: f32) -> Vec<u8> {
+    fn generate_wav_sine(
+        sample_rate: u32,
+        channels: u16,
+        freq_hz: f32,
+        duration_secs: f32,
+    ) -> Vec<u8> {
         let num_samples = (sample_rate as f32 * duration_secs) as usize;
         let bits_per_sample: u16 = 16;
         let block_align = channels * (bits_per_sample / 8);

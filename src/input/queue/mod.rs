@@ -30,10 +30,8 @@ use crate::input::{AudioSource, InputDriver};
 use crate::models::{ModelRegistry, ModelStatus};
 use crate::{Error, Result};
 
-use bucket::{is_not_found, BucketAudioSource, Bucket};
-use job::{
-    ErrorCode, JobResult, NotifyKind, NotifyResult, SourceRef, TranscribeJob, WIRE_VERSION,
-};
+use bucket::{is_not_found, Bucket, BucketAudioSource};
+use job::{ErrorCode, JobResult, NotifyKind, NotifyResult, SourceRef, TranscribeJob, WIRE_VERSION};
 use processed::{replay_notify, ProcessedRecord, ProcessedStatus, ProcessedStore};
 use transport::Queue;
 
@@ -236,12 +234,28 @@ where
                     .await?;
             }
             Err(PipelineError::Deterministic(code, msg)) => {
-                self.finalise_error(&job, &receipt, code, msg, duration_ms, true, msg_receive_count)
-                    .await?;
+                self.finalise_error(
+                    &job,
+                    &receipt,
+                    code,
+                    msg,
+                    duration_ms,
+                    true,
+                    msg_receive_count,
+                )
+                .await?;
             }
             Err(PipelineError::Transient(code, msg)) => {
-                self.finalise_error(&job, &receipt, code, msg, duration_ms, false, msg_receive_count)
-                    .await?;
+                self.finalise_error(
+                    &job,
+                    &receipt,
+                    code,
+                    msg,
+                    duration_ms,
+                    false,
+                    msg_receive_count,
+                )
+                .await?;
             }
             Err(PipelineError::ModelNotReady) => {
                 debug!(dedup_key = %job.dedup_key, "model not ready, nacking job");
@@ -259,14 +273,26 @@ where
         Ok(true)
     }
 
-    async fn run_pipeline(&mut self, job: &TranscribeJob) -> std::result::Result<String, PipelineError> {
+    async fn run_pipeline(
+        &mut self,
+        job: &TranscribeJob,
+    ) -> std::result::Result<String, PipelineError> {
         match self.registry.get(&self.model_name) {
             Some(ModelStatus::Ready(_)) | None => {}
             Some(ModelStatus::Pulling) => return Err(PipelineError::ModelNotReady),
             Some(ModelStatus::Failed(msg)) => return Err(PipelineError::ModelFatal(msg)),
         }
-        let format_hint = job.hints.as_ref().and_then(|h| h.mime.as_deref()).and_then(|mime| mime_guess::get_mime_extensions_str(mime).and_then(|exts| exts.first().copied()).map(str::to_owned));
-        let source = match BucketAudioSource::fetch(&self.bucket, &job.audio_key, format_hint).await {
+        let format_hint = job
+            .hints
+            .as_ref()
+            .and_then(|h| h.mime.as_deref())
+            .and_then(|mime| {
+                mime_guess::get_mime_extensions_str(mime)
+                    .and_then(|exts| exts.first().copied())
+                    .map(str::to_owned)
+            });
+        let source = match BucketAudioSource::fetch(&self.bucket, &job.audio_key, format_hint).await
+        {
             Ok(s) => s,
             Err(e) if is_not_found(&e) => {
                 return Err(PipelineError::Deterministic(
@@ -276,7 +302,10 @@ where
             }
             Err(e) => {
                 // Other bucket errors (I/O, permission) are likely transient.
-                return Err(PipelineError::Transient(ErrorCode::Internal, format!("{e}")));
+                return Err(PipelineError::Transient(
+                    ErrorCode::Internal,
+                    format!("{e}"),
+                ));
             }
         };
         let pipeline = self.guard.acquire().map_err(|e| {

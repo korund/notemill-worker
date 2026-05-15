@@ -15,8 +15,8 @@ use base64::Engine as _;
 use twox_hash::XxHash64;
 
 use crate::config::CouchdbConfig;
-use tracing::info;
 use crate::{Error, Result};
+use tracing::info;
 
 const PROBE_TIMEOUT_SECS: u64 = 15;
 const HTTP_TIMEOUT_SECS: u64 = 30;
@@ -176,7 +176,12 @@ fn basic_auth(user: &str, pass: &str) -> String {
 /// `vault_path` is the original-case path inside the Obsidian vault, e.g.
 /// "Transcripts/2026-05-07 14-30.md".
 /// On success returns the main document _id.
-pub fn write_note(cfg: &CouchdbConfig, password: &str, vault_path: &str, text: &str) -> Result<String> {
+pub fn write_note(
+    cfg: &CouchdbConfig,
+    password: &str,
+    vault_path: &str,
+    text: &str,
+) -> Result<String> {
     let base = cfg.url.trim_end_matches('/');
     let db_url = format!("{}/{}", base, cfg.database);
     let auth = basic_auth(&cfg.username, password);
@@ -450,7 +455,11 @@ pub struct CouchdbSink {
 
 impl CouchdbSink {
     pub fn new(cfg: CouchdbConfig, password: String, vault_path: String) -> Self {
-        Self { cfg, password, vault_path }
+        Self {
+            cfg,
+            password,
+            vault_path,
+        }
     }
 }
 

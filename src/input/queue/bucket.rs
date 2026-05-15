@@ -92,7 +92,11 @@ impl BucketAudioSource {
     }
 
     /// Construct from already-loaded bytes (tests, fast paths).
-    pub fn from_bytes(name: impl Into<String>, bytes: Vec<u8>, format_hint: Option<String>) -> Self {
+    pub fn from_bytes(
+        name: impl Into<String>,
+        bytes: Vec<u8>,
+        format_hint: Option<String>,
+    ) -> Self {
         Self {
             name: name.into(),
             bytes,

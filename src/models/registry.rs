@@ -48,11 +48,7 @@ impl ModelRegistry {
     /// Try to resolve each requested model. Models already on disk become
     /// `Ready`; missing ones become `Pulling` and a background thread is
     /// spawned to download them.
-    pub fn init_models(
-        &self,
-        manager: Arc<Manager>,
-        models: Vec<(String, Option<ModelFamily>)>,
-    ) {
+    pub fn init_models(&self, manager: Arc<Manager>, models: Vec<(String, Option<ModelFamily>)>) {
         for (name, family) in models {
             match manager.resolve(&name, family) {
                 Ok(handle) => {

@@ -15,7 +15,12 @@ pub struct FileSink {
 
 impl FileSink {
     pub fn new(path: PathBuf) -> Self {
-        Self { path, overwrite: false, separator: None, state: None }
+        Self {
+            path,
+            overwrite: false,
+            separator: None,
+            state: None,
+        }
     }
 
     pub fn with_overwrite(mut self, overwrite: bool) -> Self {
@@ -46,7 +51,10 @@ impl OutputSink for FileSink {
                     .map(|m| m.len() > 0)
                     .unwrap_or(false)
             };
-            self.state = Some(SeparatorState::new(self.separator.clone(), initially_primed));
+            self.state = Some(SeparatorState::new(
+                self.separator.clone(),
+                initially_primed,
+            ));
         }
         let prefix = self.state.as_mut().unwrap().next_prefix();
 

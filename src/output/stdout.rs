@@ -10,7 +10,9 @@ pub struct StdoutSink {
 
 impl StdoutSink {
     pub fn new() -> Self {
-        Self { state: SeparatorState::new(None, false) }
+        Self {
+            state: SeparatorState::new(None, false),
+        }
     }
 
     pub fn with_separator(mut self, separator: Option<String>) -> Self {

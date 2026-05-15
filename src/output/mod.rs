@@ -4,14 +4,14 @@
 //! All implementations are behind a common trait.
 
 mod concat;
-mod file;
 pub mod couchdb;
+mod file;
 pub mod frontmatter;
 mod stdout;
 
+pub use couchdb::CouchdbSink;
 pub use file::FileSink;
 pub use stdout::StdoutSink;
-pub use couchdb::CouchdbSink;
 
 use crate::Result;
 
