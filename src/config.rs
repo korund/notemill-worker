@@ -29,6 +29,45 @@ pub struct AudioConfig {
 pub struct PreprocessConfig {
     #[serde(default)]
     pub vad: VadConfig,
+    #[serde(default)]
+    pub chunking: ChunkingConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ChunkingConfig {
+    /// Split the speech stream into bounded-length chunks before
+    /// transcribing. Default: true.
+    #[serde(default = "default_chunking_enabled")]
+    pub enabled: bool,
+    /// Soft cap on a single chunk's length in seconds. Adjacent VAD
+    /// segments are grouped while their sum stays under this. Default: 20.
+    #[serde(default = "default_chunking_max_seconds")]
+    pub max_seconds: f32,
+    /// Used only when a single VAD segment is longer than `max_seconds`.
+    /// Consecutive over-cap slices overlap by this many seconds; the
+    /// duplicate words are deduped on transcript join. Default: 0.5.
+    #[serde(default = "default_chunking_overlap_seconds")]
+    pub overlap_seconds: f32,
+}
+
+impl Default for ChunkingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_chunking_enabled(),
+            max_seconds: default_chunking_max_seconds(),
+            overlap_seconds: default_chunking_overlap_seconds(),
+        }
+    }
+}
+
+fn default_chunking_enabled() -> bool {
+    true
+}
+fn default_chunking_max_seconds() -> f32 {
+    20.0
+}
+fn default_chunking_overlap_seconds() -> f32 {
+    0.5
 }
 
 #[derive(Debug, Clone, Deserialize)]

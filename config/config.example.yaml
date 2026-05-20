@@ -163,3 +163,18 @@ audio:
       # then to /opt/silero/silero_vad.onnx (the location used inside the
       # Docker image).
       model_path: null
+
+    # Chunking caps the length of audio fed to the encoder in one pass.
+    # Self-attention memory grows quadratically with sequence length, so
+    # on low-RAM hosts (e.g. NAS) keeping chunks small is what prevents
+    # std::bad_alloc on long recordings. On a beefy host set
+    # `enabled: false` and let the encoder see the full speech stream.
+    chunking:
+      enabled: true
+      # Soft cap per chunk in seconds. Adjacent VAD segments are grouped
+      # under this; a segment longer than this is sliced with overlap.
+      max_seconds: 20.0
+      # Used only when one VAD segment exceeds max_seconds: consecutive
+      # slices repeat this much audio so a word straddling the boundary
+      # is decoded twice; the dupes are deduped on transcript join.
+      overlap_seconds: 0.5

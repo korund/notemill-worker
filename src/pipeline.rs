@@ -2,13 +2,17 @@ use std::time::Instant;
 
 use tracing::{info, warn};
 
-use crate::preprocess::SpeechSegmenter;
+use crate::preprocess::chunker::{Chunk, Chunker};
+use crate::preprocess::{Segment, SpeechSegmenter};
 use crate::{decode, engine, input, output, Result};
+
+const SAMPLE_RATE: u32 = 16_000;
 
 pub struct Pipeline {
     pub decoder: Box<dyn decode::AudioDecoder>,
     pub transcriber: Box<dyn engine::Transcriber>,
     pub segmenter: Option<Box<dyn SpeechSegmenter>>,
+    pub chunker: Option<Box<dyn Chunker>>,
 }
 
 impl Pipeline {
@@ -20,8 +24,25 @@ impl Pipeline {
     ) -> Result<()> {
         let raw = source.read()?;
         let pcm = self.decoder.decode(&raw)?;
-        let speech = self.apply_vad(pcm)?;
-        let text = self.transcriber.transcribe(&speech)?;
+        let segments = self.segment(pcm)?;
+        let chunks = self.chunk(segments);
+
+        let mut parts: Vec<(String, bool)> = Vec::with_capacity(chunks.len());
+        for (i, c) in chunks.iter().enumerate() {
+            let pcm = decode::Pcm16kMono {
+                samples: c.pcm.clone(),
+            };
+            let text = self.transcriber.transcribe(&pcm)?;
+            info!(
+                chunk = i + 1,
+                of = chunks.len(),
+                samples = c.pcm.len(),
+                "chunk transcribed"
+            );
+            parts.push((text, c.has_overlap_with_next));
+        }
+        let text = crate::preprocess::chunker::join_texts(&parts);
+
         let body = match fm {
             Some(prefix) => format!("{}{}\n", prefix, text),
             None => format!("{}\n", text),
@@ -29,29 +50,52 @@ impl Pipeline {
         sink.write(&body)
     }
 
-    fn apply_vad(&mut self, pcm: decode::Pcm16kMono) -> Result<decode::Pcm16kMono> {
+    fn segment(&mut self, pcm: decode::Pcm16kMono) -> Result<Vec<Segment>> {
         let Some(seg) = self.segmenter.as_mut() else {
-            return Ok(pcm);
+            return Ok(vec![full_segment(pcm)]);
         };
         let segments = seg.segment(&pcm)?;
         if segments.is_empty() {
             warn!("vad found no speech, falling back to full audio");
-            return Ok(pcm);
+            return Ok(vec![full_segment(pcm)]);
         }
-        let total: usize = segments.iter().map(|s| s.pcm.len()).sum();
-        let mut combined = Vec::with_capacity(total);
-        for s in &segments {
-            combined.extend_from_slice(&s.pcm);
-        }
-        let original_ms = (pcm.samples.len() as u64 * 1000) / 16_000;
-        let kept_ms = (combined.len() as u64 * 1000) / 16_000;
+        let total_ms: u32 = segments.last().map(|s| s.end_ms).unwrap_or(0);
+        let kept_samples: usize = segments.iter().map(|s| s.pcm.len()).sum();
+        let original_ms = (pcm.samples.len() as u64 * 1000) / SAMPLE_RATE as u64;
+        let kept_ms = (kept_samples as u64 * 1000) / SAMPLE_RATE as u64;
         info!(
             n_segments = segments.len(),
-            original_ms,
-            kept_ms,
-            "vad applied"
+            original_ms, kept_ms, total_ms, "vad applied"
         );
-        Ok(decode::Pcm16kMono { samples: combined })
+        Ok(segments)
+    }
+
+    fn chunk(&self, segments: Vec<Segment>) -> Vec<Chunk> {
+        if let Some(chunker) = self.chunker.as_ref() {
+            let chunks = chunker.chunk(segments);
+            info!(n_chunks = chunks.len(), "chunking applied");
+            chunks
+        } else {
+            // No chunker: concatenate every segment into a single chunk so
+            // the encoder sees one continuous speech stream.
+            let mut combined: Vec<f32> = Vec::new();
+            for s in segments {
+                combined.extend_from_slice(&s.pcm);
+            }
+            vec![Chunk {
+                pcm: combined,
+                has_overlap_with_next: false,
+            }]
+        }
+    }
+}
+
+fn full_segment(pcm: decode::Pcm16kMono) -> Segment {
+    let end_ms = ((pcm.samples.len() as u64 * 1000) / SAMPLE_RATE as u64) as u32;
+    Segment {
+        start_ms: 0,
+        end_ms,
+        pcm: pcm.samples,
     }
 }
 
