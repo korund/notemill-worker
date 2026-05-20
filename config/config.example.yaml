@@ -120,30 +120,33 @@ output:
     # CLI override: --target
     target: Inbox
 
-# --- FFmpeg --------------------------------------------------------------
+# --- Audio ---------------------------------------------------------------
 #
-# Global FFmpeg library settings, applied once at startup.
-#
-# `log_level` controls how chatty FFmpeg is on stderr:
-#   quiet   - no FFmpeg messages at all
-#   error   - only errors (default; silences harmless ogg/opus warnings
-#             that Telegram voice notes commonly trigger)
-#   warning - errors + warnings
-#   info    - everything FFmpeg normally emits
-#   verbose / debug / trace - increasingly noisy
-ffmpeg:
-  log_level: error
-
-# --- Audio preprocessing -------------------------------------------------
-#
-# Steps applied between decoding and transcription. Currently:
-#   * vad: silero-based voice activity detection. Trims non-speech regions
-#          before they reach the encoder, which both reduces memory pressure
-#          on long files and suppresses hallucinations on silence.
+# Decoder (ffmpeg) settings and preprocessing steps that run between
+# decode and transcription:
+#   * ffmpeg: global libav* options (log verbosity).
+#   * preprocess.vad: silero-based voice activity detection. Trims non-
+#     speech regions before they reach the encoder, which both reduces
+#     memory pressure on long files and suppresses hallucinations on
+#     silence.
+#   * preprocess.chunking: cap on the audio length fed to the encoder
+#     in one pass.
 #
 # When running on a host with plenty of RAM and short clips, set
 # `vad.enabled: false` to skip the step entirely.
 audio:
+  # Global FFmpeg library settings, applied once at startup.
+  #
+  # `log_level` controls how chatty FFmpeg is on stderr:
+  #   quiet   - no FFmpeg messages at all
+  #   error   - only errors (default; silences harmless ogg/opus warnings
+  #             that Telegram voice notes commonly trigger)
+  #   warning - errors + warnings
+  #   info    - everything FFmpeg normally emits
+  #   verbose / debug / trace - increasingly noisy
+  ffmpeg:
+    log_level: error
+
   preprocess:
     vad:
       # Run silero VAD before transcription. Default: true.
@@ -153,15 +156,14 @@ audio:
       threshold: 0.5
       # Speech runs shorter than this are dropped (filters blips). ms.
       min_speech_ms: 250
-      # Silence shorter than this between speech runs is preserved (runs
-      # are merged). Larger values stitch broken phrases back together. ms.
+      # Silence shorter than this between speech runs is preserved (runs are merged).
+      # Larger values stitch broken phrases back together. ms.
       min_silence_ms: 500
       # Pad each detected segment with this much audio on both sides to
       # avoid clipping consonants at boundaries. ms.
       speech_pad_ms: 100
       # Path to silero_vad.onnx. If unset, falls back to $SILERO_VAD_MODEL,
-      # then to /opt/silero/silero_vad.onnx (the location used inside the
-      # Docker image).
+      # then to /opt/silero/silero_vad.onnx (the location used inside the Docker image).
       model_path: null
 
     # Chunking caps the length of audio fed to the encoder in one pass.
@@ -174,7 +176,7 @@ audio:
       # Soft cap per chunk in seconds. Adjacent VAD segments are grouped
       # under this; a segment longer than this is sliced with overlap.
       max_seconds: 20.0
-      # Used only when one VAD segment exceeds max_seconds: consecutive
-      # slices repeat this much audio so a word straddling the boundary
-      # is decoded twice; the dupes are deduped on transcript join.
+      # Used only when one VAD segment exceeds max_seconds.
+      # Consecutive slices repeat this much audio so a word straddling
+      # the boundary is decoded twice; the dupes are deduped on transcript join.
       overlap_seconds: 0.5

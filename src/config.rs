@@ -14,13 +14,13 @@ pub struct Config {
     #[serde(default)]
     pub input: Option<InputConfig>,
     #[serde(default)]
-    pub ffmpeg: Option<FfmpegConfig>,
-    #[serde(default)]
     pub audio: Option<AudioConfig>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct AudioConfig {
+    #[serde(default)]
+    pub ffmpeg: Option<FfmpegConfig>,
     #[serde(default)]
     pub preprocess: PreprocessConfig,
 }
@@ -453,8 +453,9 @@ impl Config {
     /// Call once at startup after Config::load_merged.
     pub fn apply_globals(&self) {
         let level = self
-            .ffmpeg
+            .audio
             .as_ref()
+            .and_then(|a| a.ffmpeg.as_ref())
             .and_then(|f| f.log_level.as_deref())
             .unwrap_or("error");
         crate::decode::set_ffmpeg_log_level(level);

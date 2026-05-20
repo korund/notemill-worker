@@ -137,9 +137,8 @@ pub fn run(common: CommonRunArgs) -> Result<()> {
             match status {
                 ModelStatus::Ready(handle) => Ok(Pipeline {
                     decoder: Box::new(decode::DefaultDecoder::new()),
+                    preprocess: crate::preprocess::Preprocess::from_audio(audio_cfg.as_ref())?,
                     transcriber: engine::build(&handle)?,
-                    segmenter: crate::preprocess::segmenter_from_audio(audio_cfg.as_ref())?,
-                    chunker: crate::preprocess::chunker_from_audio(audio_cfg.as_ref()),
                 }),
                 ModelStatus::Pulling => Err(Error::Model("model still downloading".into())),
                 ModelStatus::Failed(msg) => Err(Error::Model(msg)),

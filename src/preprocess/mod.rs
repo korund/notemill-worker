@@ -8,6 +8,37 @@ use crate::Result;
 pub mod chunker;
 pub mod vad;
 
+/// Bundle of preprocess stages that sit between decode and transcribe.
+/// Both stages are optional: when both are `None` the pipeline feeds the
+/// decoded PCM straight to the transcriber.
+pub struct Preprocess {
+    pub segmenter: Option<Box<dyn SpeechSegmenter>>,
+    pub chunker: Option<Box<dyn chunker::Chunker>>,
+}
+
+impl Preprocess {
+    pub fn none() -> Self {
+        Self {
+            segmenter: None,
+            chunker: None,
+        }
+    }
+
+    /// Build from the top-level Config (convenience for one-shot callers).
+    pub fn from_config(cfg: &Config) -> Result<Self> {
+        Self::from_audio(cfg.audio.as_ref())
+    }
+
+    /// Build from an optional audio block. A missing block disables both
+    /// stages.
+    pub fn from_audio(audio: Option<&AudioConfig>) -> Result<Self> {
+        Ok(Self {
+            segmenter: segmenter_from_audio(audio)?,
+            chunker: chunker_from_audio(audio),
+        })
+    }
+}
+
 /// A contiguous speech region extracted from the input PCM.
 ///
 /// `start_ms`/`end_ms` are offsets in the original audio. `pcm` holds the
@@ -27,15 +58,9 @@ pub trait SpeechSegmenter {
     fn segment(&mut self, pcm: &Pcm16kMono) -> Result<Vec<Segment>>;
 }
 
-/// Build a segmenter from a top-level Config (convenience for one-shot
-/// callers like `run file`).
-pub fn segmenter_from_config(cfg: &Config) -> Result<Option<Box<dyn SpeechSegmenter>>> {
-    segmenter_from_audio(cfg.audio.as_ref())
-}
-
 /// Build a segmenter from an optional audio block. Returns `None` when VAD
 /// is disabled or the audio block is absent.
-pub fn segmenter_from_audio(
+fn segmenter_from_audio(
     audio: Option<&AudioConfig>,
 ) -> Result<Option<Box<dyn SpeechSegmenter>>> {
     let Some(audio) = audio else {
@@ -56,15 +81,10 @@ pub fn segmenter_from_audio(
     Ok(Some(Box::new(seg)))
 }
 
-/// Build a chunker from a top-level Config.
-pub fn chunker_from_config(cfg: &Config) -> Option<Box<dyn chunker::Chunker>> {
-    chunker_from_audio(cfg.audio.as_ref())
-}
-
 /// Build a chunker from an optional audio block. Returns `None` when
 /// chunking is disabled or the audio block is absent (caller should then
 /// transcribe the full speech stream as a single chunk).
-pub fn chunker_from_audio(audio: Option<&AudioConfig>) -> Option<Box<dyn chunker::Chunker>> {
+fn chunker_from_audio(audio: Option<&AudioConfig>) -> Option<Box<dyn chunker::Chunker>> {
     let audio = audio?;
     let cc = &audio.preprocess.chunking;
     if !cc.enabled {

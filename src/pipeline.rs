@@ -2,17 +2,16 @@ use std::time::Instant;
 
 use tracing::{info, warn};
 
-use crate::preprocess::chunker::{Chunk, Chunker};
-use crate::preprocess::{Segment, SpeechSegmenter};
+use crate::preprocess::chunker::Chunk;
+use crate::preprocess::{Preprocess, Segment};
 use crate::{decode, engine, input, output, Result};
 
 const SAMPLE_RATE: u32 = 16_000;
 
 pub struct Pipeline {
     pub decoder: Box<dyn decode::AudioDecoder>,
+    pub preprocess: Preprocess,
     pub transcriber: Box<dyn engine::Transcriber>,
-    pub segmenter: Option<Box<dyn SpeechSegmenter>>,
-    pub chunker: Option<Box<dyn Chunker>>,
 }
 
 impl Pipeline {
@@ -51,7 +50,7 @@ impl Pipeline {
     }
 
     fn segment(&mut self, pcm: decode::Pcm16kMono) -> Result<Vec<Segment>> {
-        let Some(seg) = self.segmenter.as_mut() else {
+        let Some(seg) = self.preprocess.segmenter.as_mut() else {
             return Ok(vec![full_segment(pcm)]);
         };
         let segments = seg.segment(&pcm)?;
@@ -71,7 +70,7 @@ impl Pipeline {
     }
 
     fn chunk(&self, segments: Vec<Segment>) -> Vec<Chunk> {
-        if let Some(chunker) = self.chunker.as_ref() {
+        if let Some(chunker) = self.preprocess.chunker.as_ref() {
             let chunks = chunker.chunk(segments);
             info!(n_chunks = chunks.len(), "chunking applied");
             chunks

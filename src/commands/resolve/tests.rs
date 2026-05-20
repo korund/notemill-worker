@@ -15,7 +15,6 @@ fn empty_config() -> Config {
             name: NamingConfig::default(),
         },
         input: None,
-        ffmpeg: None,
         audio: None,
     }
 }

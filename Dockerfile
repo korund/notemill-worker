@@ -1,5 +1,6 @@
+# Linux ONNX runtime without vector optimization, pinned by tag + sha256.
+# Source: https://github.com/microsoft/onnxruntime/releases
 ARG ORT_VERSION=1.26.0
-# sha256 of onnxruntime-linux-x64-${ORT_VERSION}.tgz from https://github.com/microsoft/onnxruntime/releases
 ARG ORT_SHA256=1254da24fb389cf39dc0ff3451ab48301740ffbfcbaf646849df92f80ee92c57
 
 # Silero VAD ONNX model, pinned by tag + sha256.

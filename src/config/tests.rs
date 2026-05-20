@@ -22,7 +22,7 @@ fn minimal_config_only_output_section() {
     let cfg = parse("output: {}\n");
     assert!(cfg.model.is_none());
     assert!(cfg.input.is_none());
-    assert!(cfg.ffmpeg.is_none());
+    assert!(cfg.audio.is_none());
     assert!(cfg.output.sink.is_none());
     assert!(cfg.output.couchdb.is_none());
     assert!(cfg.output.file.is_none());
