@@ -104,6 +104,30 @@ fn speech_pad_ms_expands_and_clamps_to_buffer() {
 }
 
 #[test]
+fn deaf_when_no_segments_and_max_prob_below_threshold() {
+    assert!(is_deaf(true, 0.0));
+    assert!(is_deaf(true, 0.05));
+    assert!(is_deaf(true, DEAF_THRESHOLD - f32::EPSILON));
+}
+
+#[test]
+fn not_deaf_when_segments_present() {
+    // Even with low max_prob, the presence of any segment means the
+    // model produced usable output -- not deaf.
+    assert!(!is_deaf(false, 0.0));
+    assert!(!is_deaf(false, 0.99));
+}
+
+#[test]
+fn not_deaf_when_max_prob_above_threshold() {
+    // No segments crossed the user threshold, but the model clearly
+    // heard something near it -- whisper territory, not a broken VAD.
+    assert!(!is_deaf(true, DEAF_THRESHOLD));
+    assert!(!is_deaf(true, 0.3));
+    assert!(!is_deaf(true, 0.99));
+}
+
+#[test]
 fn speech_pad_clamps_at_buffer_start() {
     let pcm = pcm_of_windows(10);
     let probs = vec![0.9; 10];
