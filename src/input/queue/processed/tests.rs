@@ -34,6 +34,25 @@ fn replay_ok() {
 }
 
 #[test]
+fn replay_no_speech() {
+    let rec = ProcessedRecord {
+        dedup_key: "tg:1:2".into(),
+        finished_at_ms: 0,
+        status: ProcessedStatus::NoSpeech {
+            reason: NoSpeechReason::Silent,
+        },
+    };
+    let n = replay_notify(&rec, src());
+    match n.result {
+        JobResult::NoSpeech { reason, duration_ms } => {
+            assert_eq!(reason, NoSpeechReason::Silent);
+            assert_eq!(duration_ms, 0);
+        }
+        _ => panic!("expected NoSpeech"),
+    }
+}
+
+#[test]
 fn replay_error_drops_msg() {
     let rec = ProcessedRecord {
         dedup_key: "tg:1:2".into(),

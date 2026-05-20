@@ -6,8 +6,9 @@ use crate::cli::{CommonRunArgs, Sink};
 use crate::config::{Config, NamingConfig};
 use crate::input::queue::backends::fs::FsBucket;
 use crate::input::queue::backends::sqlite::SqliteBackend;
-use crate::input::queue::job::{NotifyResult, TranscribeJob};
-use crate::input::queue::{JobProcessor, QueueDriver, QueueDriverConfig};
+use crate::input::queue::job::{NoSpeechReason, NotifyResult, TranscribeJob};
+use crate::input::queue::{JobProcessor, ProcessOutcome, QueueDriver, QueueDriverConfig};
+use crate::pipeline::RunOutcome;
 use crate::input::{AudioSource, InputDriver};
 use crate::pipeline::{ModelGuard, Pipeline};
 use crate::{decode, engine, models, output, Error, Result};
@@ -72,11 +73,15 @@ impl JobProcessor for QueueProcessor {
         pipeline: &mut Pipeline,
         source: &dyn AudioSource,
         job: &TranscribeJob,
-    ) -> Result<String> {
+    ) -> Result<ProcessOutcome> {
         match &mut self.queue_sink {
             QueueSink::Shared { sink, output_ref } => {
-                pipeline.run_one(source, sink.as_mut(), None)?;
-                Ok(output_ref.clone())
+                match pipeline.run_one(source, sink.as_mut(), None)? {
+                    RunOutcome::Written => Ok(ProcessOutcome::Written(output_ref.clone())),
+                    // Pipeline only produces NoSpeech for Speech::None today;
+                    // hard-code Silent here until more reasons surface.
+                    RunOutcome::NoSpeech => Ok(ProcessOutcome::NoSpeech(NoSpeechReason::Silent)),
+                }
             }
             QueueSink::Couchdb {
                 cdb,
@@ -93,8 +98,10 @@ impl JobProcessor for QueueProcessor {
                     output::couchdb::doc_path(prefix, &stem)
                 };
                 let mut sink = output::CouchdbSink::new(cdb.clone(), pwd.clone(), path.clone());
-                pipeline.run_one(source, &mut sink, None)?;
-                Ok(format!("couchdb://{path}"))
+                match pipeline.run_one(source, &mut sink, None)? {
+                    RunOutcome::Written => Ok(ProcessOutcome::Written(format!("couchdb://{path}"))),
+                    RunOutcome::NoSpeech => Ok(ProcessOutcome::NoSpeech(NoSpeechReason::Silent)),
+                }
             }
         }
     }

@@ -31,23 +31,36 @@ use crate::models::{ModelRegistry, ModelStatus};
 use crate::{Error, Result};
 
 use bucket::{is_not_found, Bucket, BucketAudioSource};
-use job::{ErrorCode, JobResult, NotifyKind, NotifyResult, SourceRef, TranscribeJob, WIRE_VERSION};
+use job::{
+    ErrorCode, JobResult, NoSpeechReason, NotifyKind, NotifyResult, SourceRef, TranscribeJob,
+    WIRE_VERSION,
+};
 use processed::{replay_notify, ProcessedRecord, ProcessedStatus, ProcessedStore};
 use transport::Queue;
+
+/// Result of one pipeline invocation, lifted from the inner
+/// `pipeline::RunOutcome` so the queue driver can route the finalisation
+/// (ack + processed_jobs row + notify) without depending on the pipeline
+/// module's enum directly.
+#[derive(Debug)]
+pub enum ProcessOutcome {
+    /// Transcript was written; carries the sink reference for `NotifyResult::Ok`.
+    Written(String),
+    /// Segmenter classified the input as silent; nothing was written. The
+    /// queue driver should ack and emit `NotifyResult::NoSpeech`.
+    NoSpeech(NoSpeechReason),
+}
 
 /// Pipeline closure (decoder -> engine -> output sink), invoked once per
 /// job. Sync because the in-memory model and CPU decoding don't benefit
 /// from async, and the heavy parts may be `!Send`.
-///
-/// Returns the `output_ref` written into the sink (e.g. the CouchDB doc id),
-/// which is propagated into `NotifyResult` and `processed_jobs`.
 pub trait JobProcessor {
     fn process(
         &mut self,
         pipeline: &mut crate::pipeline::Pipeline,
         source: &dyn AudioSource,
         job: &TranscribeJob,
-    ) -> Result<String>;
+    ) -> Result<ProcessOutcome>;
 }
 
 #[derive(Debug, Clone)]
@@ -229,8 +242,12 @@ where
         let duration_ms = started.elapsed().as_millis() as u64;
 
         match outcome {
-            Ok(output_ref) => {
+            Ok(ProcessOutcome::Written(output_ref)) => {
                 self.finalise_ok(&job, &receipt, output_ref, duration_ms)
+                    .await?;
+            }
+            Ok(ProcessOutcome::NoSpeech(reason)) => {
+                self.finalise_no_speech(&job, &receipt, reason, duration_ms)
                     .await?;
             }
             Err(PipelineError::Deterministic(code, msg)) => {
@@ -276,7 +293,7 @@ where
     async fn run_pipeline(
         &mut self,
         job: &TranscribeJob,
-    ) -> std::result::Result<String, PipelineError> {
+    ) -> std::result::Result<ProcessOutcome, PipelineError> {
         match self.registry.get(&self.model_name) {
             Some(ModelStatus::Ready(_)) | None => {}
             Some(ModelStatus::Pulling) => return Err(PipelineError::ModelNotReady),
@@ -348,6 +365,40 @@ where
         self.transcribe_q.ack(receipt).await?;
         // Best-effort cleanup after the queue is already clear; leftover audio
         // can be collected by a future garbage-collection pass.
+        if let Err(e) = self.bucket.delete(&job.audio_key).await {
+            warn!(error = %e, audio_key = %job.audio_key, "bucket delete failed");
+        }
+        Ok(())
+    }
+
+    async fn finalise_no_speech(
+        &mut self,
+        job: &TranscribeJob,
+        receipt: &transport::Receipt,
+        reason: NoSpeechReason,
+        duration_ms: u64,
+    ) -> Result<()> {
+        let rec = ProcessedRecord {
+            dedup_key: job.dedup_key.clone(),
+            finished_at_ms: now_ms(),
+            status: ProcessedStatus::NoSpeech { reason },
+        };
+        self.processed.record(&rec).await?;
+        let notify = NotifyResult {
+            v: WIRE_VERSION,
+            kind: NotifyKind::NotifyResult,
+            dedup_key: job.dedup_key.clone(),
+            source: SourceRef::from_job(&job.source),
+            result: JobResult::NoSpeech {
+                reason,
+                duration_ms,
+            },
+        };
+        if let Err(e) = self.notify_q.enqueue(notify).await {
+            warn!(error = %e, "notify enqueue failed (no_speech branch)");
+        }
+        self.transcribe_q.ack(receipt).await?;
+        // Same best-effort bucket cleanup as the ok branch.
         if let Err(e) = self.bucket.delete(&job.audio_key).await {
             warn!(error = %e, audio_key = %job.audio_key, "bucket delete failed");
         }

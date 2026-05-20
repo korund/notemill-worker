@@ -1,14 +1,22 @@
-//! Pure-helper tests for queue runner: `note_stem` and `collision_free_path`.
-//!
-//! `QueueProcessor::process` itself is not covered here -- it requires a live
-//! Pipeline + AudioSource and is better suited to an integration test once
-//! lightweight stubs exist.
+//! Pure-helper tests for queue runner (`note_stem`, `collision_free_path`)
+//! plus `QueueProcessor::process` mapping from `RunOutcome` to
+//! `ProcessOutcome` against a stubbed pipeline.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
+use std::rc::Rc;
 
 use crate::config::NamingConfig;
-use crate::input::queue::job::{TelegramKind, TelegramSource, TranscribeJob, TranscribeKind};
+use crate::decode::{AudioDecoder, Pcm16kMono};
+use crate::engine::Transcriber;
+use crate::input::queue::job::{
+    NoSpeechReason, TelegramKind, TelegramSource, TranscribeJob, TranscribeKind,
+};
+use crate::input::queue::ProcessOutcome;
+use crate::input::{AudioSource, RawAudio};
+use crate::output::OutputSink;
+use crate::pipeline::Pipeline;
+use crate::preprocess::{Preprocess, Segment, Speech, SpeechSegmenter};
 
 use super::*;
 
@@ -140,6 +148,121 @@ fn collision_free_propagates_exists_error() {
         Err(Error::Output("backend offline".into()))
     });
     assert!(p.is_err());
+}
+
+// ---------- QueueProcessor::process mapping ----------
+
+struct StubSource;
+impl AudioSource for StubSource {
+    fn name(&self) -> &str {
+        "stub"
+    }
+    fn read(&self) -> Result<RawAudio> {
+        Ok(RawAudio {
+            bytes: vec![0u8; 4],
+            format_hint: None,
+        })
+    }
+}
+
+struct StubDecoder;
+impl AudioDecoder for StubDecoder {
+    fn decode(&self, _raw: &RawAudio) -> Result<Pcm16kMono> {
+        Ok(Pcm16kMono {
+            samples: vec![0.0; 16_000],
+        })
+    }
+}
+
+struct StubSegmenter(Cell<Option<Speech>>);
+impl SpeechSegmenter for StubSegmenter {
+    fn segment(&mut self, _pcm: &Pcm16kMono) -> Result<Speech> {
+        Ok(self.0.take().expect("segmenter called twice"))
+    }
+}
+
+struct StubTranscriber {
+    calls: Rc<Cell<usize>>,
+}
+impl Transcriber for StubTranscriber {
+    fn transcribe(&mut self, _pcm: &Pcm16kMono) -> Result<String> {
+        self.calls.set(self.calls.get() + 1);
+        Ok("ok".to_string())
+    }
+}
+
+#[derive(Default)]
+struct CountingSink {
+    writes: Rc<Cell<usize>>,
+}
+impl OutputSink for CountingSink {
+    fn write(&mut self, _text: &str) -> Result<()> {
+        self.writes.set(self.writes.get() + 1);
+        Ok(())
+    }
+}
+
+fn build_pipeline(verdict: Speech) -> (Pipeline, Rc<Cell<usize>>) {
+    let calls = Rc::new(Cell::new(0));
+    let pre = Preprocess {
+        segmenter: Some(Box::new(StubSegmenter(Cell::new(Some(verdict))))),
+        chunker: None,
+    };
+    let p = Pipeline {
+        decoder: Box::new(StubDecoder),
+        preprocess: pre,
+        transcriber: Box::new(StubTranscriber {
+            calls: calls.clone(),
+        }),
+    };
+    (p, calls)
+}
+
+fn shared_sink(output_ref: &str) -> (QueueSink, Rc<Cell<usize>>) {
+    let writes = Rc::new(Cell::new(0));
+    let sink: Box<dyn OutputSink> = Box::new(CountingSink {
+        writes: writes.clone(),
+    });
+    let qs = QueueSink::Shared {
+        sink,
+        output_ref: output_ref.to_string(),
+    };
+    (qs, writes)
+}
+
+#[test]
+fn process_written_returns_output_ref_and_writes() {
+    let (mut pipeline, transcribes) =
+        build_pipeline(Speech::Detected(vec![Segment {
+            start_ms: 0,
+            end_ms: 100,
+            pcm: vec![0.0; 1600],
+        }]));
+    let (qs, writes) = shared_sink("stub://x");
+    let mut proc = QueueProcessor { queue_sink: qs };
+    let j = job(1, 2, "2026-05-07T10:15:30Z");
+    let out = proc.process(&mut pipeline, &StubSource, &j).unwrap();
+    match out {
+        ProcessOutcome::Written(r) => assert_eq!(r, "stub://x"),
+        other => panic!("expected Written, got {other:?}"),
+    }
+    assert_eq!(transcribes.get(), 1);
+    assert_eq!(writes.get(), 1);
+}
+
+#[test]
+fn process_no_speech_returns_silent_and_skips_write() {
+    let (mut pipeline, transcribes) = build_pipeline(Speech::None);
+    let (qs, writes) = shared_sink("stub://x");
+    let mut proc = QueueProcessor { queue_sink: qs };
+    let j = job(1, 2, "2026-05-07T10:15:30Z");
+    let out = proc.process(&mut pipeline, &StubSource, &j).unwrap();
+    match out {
+        ProcessOutcome::NoSpeech(r) => assert_eq!(r, NoSpeechReason::Silent),
+        other => panic!("expected NoSpeech, got {other:?}"),
+    }
+    assert_eq!(transcribes.get(), 0);
+    assert_eq!(writes.get(), 0);
 }
 
 #[test]

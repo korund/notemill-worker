@@ -80,6 +80,37 @@ fn notify_result_error_roundtrip() {
 }
 
 #[test]
+fn notify_result_no_speech_roundtrip() {
+    let r = NotifyResult {
+        v: WIRE_VERSION,
+        kind: NotifyKind::NotifyResult,
+        dedup_key: "tg:1:2".into(),
+        source: SourceRef {
+            kind: TelegramKind::Telegram,
+            chat_id: 1,
+            message_id: 2,
+            update_id: 3,
+        },
+        result: JobResult::NoSpeech {
+            reason: NoSpeechReason::Silent,
+            duration_ms: 42,
+        },
+    };
+    let s = serde_json::to_string(&r).unwrap();
+    assert!(s.contains("\"status\":\"no_speech\""), "status tag: {s}");
+    assert!(s.contains("\"reason\":\"silent\""), "reason value: {s}");
+    assert!(s.contains("\"duration_ms\":42"), "duration kept: {s}");
+    let back: NotifyResult = serde_json::from_str(&s).unwrap();
+    match back.result {
+        JobResult::NoSpeech { reason, duration_ms } => {
+            assert_eq!(reason, NoSpeechReason::Silent);
+            assert_eq!(duration_ms, 42);
+        }
+        other => panic!("expected NoSpeech, got {other:?}"),
+    }
+}
+
+#[test]
 fn dedup_key_format() {
     assert_eq!(TranscribeJob::dedup_key_for(123, 45), "tg:123:45");
 }

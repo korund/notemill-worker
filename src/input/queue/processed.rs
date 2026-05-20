@@ -13,7 +13,9 @@ use std::future::Future;
 
 use crate::Result;
 
-use super::job::{ErrorCode, JobResult, NotifyKind, NotifyResult, SourceRef, WIRE_VERSION};
+use super::job::{
+    ErrorCode, JobResult, NoSpeechReason, NotifyKind, NotifyResult, SourceRef, WIRE_VERSION,
+};
 
 /// One row of the `processed_jobs` table.
 #[derive(Debug, Clone)]
@@ -28,6 +30,7 @@ pub struct ProcessedRecord {
 pub enum ProcessedStatus {
     Ok { output_ref: String },
     Error { error_code: ErrorCode },
+    NoSpeech { reason: NoSpeechReason },
 }
 
 /// Backend-agnostic idempotency store. SQLite impl lives in `backends`.
@@ -53,6 +56,10 @@ pub fn replay_notify(record: &ProcessedRecord, source: SourceRef) -> NotifyResul
         ProcessedStatus::Error { error_code } => JobResult::Error {
             error_code: *error_code,
             error_msg: String::new(),
+            duration_ms: 0,
+        },
+        ProcessedStatus::NoSpeech { reason } => JobResult::NoSpeech {
+            reason: *reason,
             duration_ms: 0,
         },
     };

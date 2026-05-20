@@ -17,20 +17,40 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::{de::DeserializeOwned, Serialize};
 use tokio::task;
 
-use crate::input::queue::job::ErrorCode;
+use crate::input::queue::job::{ErrorCode, NoSpeechReason};
 use crate::input::queue::processed::{ProcessedRecord, ProcessedStatus, ProcessedStore};
 use crate::input::queue::transport::{Message, Queue, Receipt};
 use crate::{Error, Result};
 
 const PROCESSED_DDL: &str = "\
 CREATE TABLE IF NOT EXISTS processed_jobs (
-    dedup_key   TEXT PRIMARY KEY,
-    finished_at INTEGER NOT NULL,
-    status      TEXT NOT NULL,
-    output_ref  TEXT,
-    error_code  TEXT
+    dedup_key        TEXT PRIMARY KEY,
+    finished_at      INTEGER NOT NULL,
+    status           TEXT NOT NULL,
+    output_ref       TEXT,
+    error_code       TEXT,
+    no_speech_reason TEXT
 );
 ";
+
+/// Idempotent migration for installations created before the
+/// `no_speech_reason` column existed. SQLite returns "duplicate column
+/// name" when the column is already present; that error is expected and
+/// swallowed.
+fn migrate_processed_no_speech(conn: &Connection) -> Result<()> {
+    match conn.execute(
+        "ALTER TABLE processed_jobs ADD COLUMN no_speech_reason TEXT",
+        [],
+    ) {
+        Ok(_) => Ok(()),
+        Err(rusqlite::Error::SqliteFailure(_, Some(msg)))
+            if msg.contains("duplicate column name") =>
+        {
+            Ok(())
+        }
+        Err(e) => Err(map_err(e)),
+    }
+}
 
 /// Shared SQLite handle. Hand out queue and processed-store views over the
 /// same underlying connection.
@@ -59,6 +79,7 @@ impl SqliteBackend {
         conn.pragma_update(None, "synchronous", &"NORMAL")
             .map_err(map_err)?;
         conn.execute_batch(PROCESSED_DDL).map_err(map_err)?;
+        migrate_processed_no_speech(&conn)?;
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
         })
@@ -379,16 +400,25 @@ impl ProcessedStore for SqliteProcessedStore {
         let dk = dedup_key.to_string();
         blocking(move || {
             let c = conn.lock().expect("sqlite mutex poisoned");
-            let row: Option<(String, i64, String, Option<String>, Option<String>)> = c
+            let row: Option<(
+                String,
+                i64,
+                String,
+                Option<String>,
+                Option<String>,
+                Option<String>,
+            )> = c
                 .query_row(
-                    "SELECT dedup_key, finished_at, status, output_ref, error_code \
+                    "SELECT dedup_key, finished_at, status, output_ref, error_code, no_speech_reason \
                      FROM processed_jobs WHERE dedup_key = ?1",
                     params![dk],
-                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)),
                 )
                 .optional()
                 .map_err(map_err)?;
-            let Some((dedup_key, finished_at_ms, status, output_ref, error_code)) = row else {
+            let Some((dedup_key, finished_at_ms, status, output_ref, error_code, no_speech_reason)) =
+                row
+            else {
                 return Ok(None);
             };
             let status = match status.as_str() {
@@ -402,6 +432,11 @@ impl ProcessedStore for SqliteProcessedStore {
                             .as_deref()
                             .ok_or_else(|| Error::Queue("error row missing error_code".into()))?,
                     )?,
+                },
+                "no_speech" => ProcessedStatus::NoSpeech {
+                    reason: parse_no_speech_reason(no_speech_reason.as_deref().ok_or_else(
+                        || Error::Queue("no_speech row missing no_speech_reason".into()),
+                    )?)?,
                 },
                 other => return Err(Error::Queue(format!("unknown status: {other}"))),
             };
@@ -419,23 +454,36 @@ impl ProcessedStore for SqliteProcessedStore {
         let rec = record.clone();
         blocking(move || {
             let c = conn.lock().expect("sqlite mutex poisoned");
-            let (status, output_ref, error_code): (&str, Option<String>, Option<&str>) =
-                match &rec.status {
-                    ProcessedStatus::Ok { output_ref } => ("ok", Some(output_ref.clone()), None),
-                    ProcessedStatus::Error { error_code } => {
-                        ("error", None, Some(error_code_str(*error_code)))
-                    }
-                };
+            let (status, output_ref, error_code, no_speech_reason): (
+                &str,
+                Option<String>,
+                Option<&str>,
+                Option<&str>,
+            ) = match &rec.status {
+                ProcessedStatus::Ok { output_ref } => {
+                    ("ok", Some(output_ref.clone()), None, None)
+                }
+                ProcessedStatus::Error { error_code } => {
+                    ("error", None, Some(error_code_str(*error_code)), None)
+                }
+                ProcessedStatus::NoSpeech { reason } => (
+                    "no_speech",
+                    None,
+                    None,
+                    Some(no_speech_reason_str(*reason)),
+                ),
+            };
             c.execute(
                 "INSERT OR REPLACE INTO processed_jobs \
-                 (dedup_key, finished_at, status, output_ref, error_code) \
-                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                 (dedup_key, finished_at, status, output_ref, error_code, no_speech_reason) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                 params![
                     rec.dedup_key,
                     rec.finished_at_ms,
                     status,
                     output_ref,
-                    error_code
+                    error_code,
+                    no_speech_reason
                 ],
             )
             .map_err(map_err)?;
@@ -453,6 +501,19 @@ fn error_code_str(c: ErrorCode) -> &'static str {
         ErrorCode::OutputFailed => "output_failed",
         ErrorCode::Internal => "internal",
     }
+}
+
+fn no_speech_reason_str(r: NoSpeechReason) -> &'static str {
+    match r {
+        NoSpeechReason::Silent => "silent",
+    }
+}
+
+fn parse_no_speech_reason(s: &str) -> Result<NoSpeechReason> {
+    Ok(match s {
+        "silent" => NoSpeechReason::Silent,
+        other => return Err(Error::Queue(format!("unknown no_speech_reason: {other}"))),
+    })
 }
 
 fn parse_error_code(s: &str) -> Result<ErrorCode> {

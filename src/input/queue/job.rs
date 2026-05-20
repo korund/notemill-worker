@@ -91,7 +91,7 @@ pub struct SourceRef {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "status", rename_all = "lowercase")]
+#[serde(tag = "status", rename_all = "snake_case")]
 pub enum JobResult {
     Ok {
         /// Reference to the produced artefact (e.g.
@@ -104,6 +104,24 @@ pub enum JobResult {
         error_msg: String,
         duration_ms: u64,
     },
+    /// Pipeline finished without producing a transcript because the
+    /// segmenter classified the input as silent. Not an error: the bot
+    /// should send the user a friendly "no speech heard" reply.
+    NoSpeech {
+        reason: NoSpeechReason,
+        duration_ms: u64,
+    },
+}
+
+/// Why the worker decided the input had no speech. Kept as an enum so
+/// future categories (too noisy, too short, empty transcript) extend
+/// the surface without renaming the existing variant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NoSpeechReason {
+    /// Silero VAD produced no segments and the peak per-window
+    /// probability stayed below the silence threshold.
+    Silent,
 }
 
 /// Error taxonomy returned to the bot for UX (reaction selection).

@@ -119,3 +119,29 @@ fn processed_store_roundtrip() {
         }
     });
 }
+
+#[test]
+fn processed_store_no_speech_roundtrip() {
+    use crate::input::queue::job::NoSpeechReason;
+    let rt = rt();
+    rt.block_on(async {
+        let be = open_mem();
+        let p = be.processed_store();
+        let rec = ProcessedRecord {
+            dedup_key: "tg:9:9".into(),
+            finished_at_ms: 7777,
+            status: ProcessedStatus::NoSpeech {
+                reason: NoSpeechReason::Silent,
+            },
+        };
+        p.record(&rec).await.unwrap();
+        let got = p.lookup("tg:9:9").await.unwrap().unwrap();
+        assert_eq!(got.finished_at_ms, 7777);
+        match got.status {
+            ProcessedStatus::NoSpeech { reason } => {
+                assert_eq!(reason, NoSpeechReason::Silent);
+            }
+            other => panic!("expected NoSpeech, got {other:?}"),
+        }
+    });
+}
