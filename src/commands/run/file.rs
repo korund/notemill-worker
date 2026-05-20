@@ -76,5 +76,6 @@ pub fn run(
         preprocess: crate::preprocess::Preprocess::from_config(&cfg)?,
         transcriber: engine::build(&model_handle)?,
     };
-    pipeline.run_one(&source, sink.as_mut(), fm.as_deref())
+    pipeline.run_one(&source, sink.as_mut(), fm.as_deref())?;
+    Ok(())
 }

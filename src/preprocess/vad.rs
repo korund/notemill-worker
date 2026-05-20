@@ -8,8 +8,9 @@ use std::path::PathBuf;
 
 use ort::session::{builder::GraphOptimizationLevel, Session};
 use ort::value::Tensor;
-use tracing::{debug, error, info, trace};
+use tracing::{debug, info, trace};
 
+use super::deafness::{classify, Speech};
 use super::{Segment, SpeechSegmenter};
 use crate::decode::Pcm16kMono;
 use crate::{Error, Result};
@@ -19,9 +20,6 @@ const WINDOW_SAMPLES: usize = 512; // 32 ms at 16 kHz, fixed by silero v6
 const CONTEXT_SAMPLES: usize = 64; // 64-sample context prefix (silero v6)
 const INPUT_SAMPLES: usize = CONTEXT_SAMPLES + WINDOW_SAMPLES;
 const WINDOW_MS: u32 = (WINDOW_SAMPLES as u32 * 1000) / SAMPLE_RATE;
-/// Below this peak probability across all windows, we treat the result
-/// not as "quiet recording" but as "VAD looks broken" and log an error.
-const DEAF_THRESHOLD: f32 = 0.1;
 
 #[derive(Debug, Clone, Copy)]
 pub struct SileroParams {
@@ -139,9 +137,9 @@ impl SileroSegmenter {
 }
 
 impl SpeechSegmenter for SileroSegmenter {
-    fn segment(&mut self, pcm: &Pcm16kMono) -> Result<Vec<Segment>> {
+    fn segment(&mut self, pcm: &Pcm16kMono) -> Result<Speech> {
         if pcm.samples.is_empty() {
-            return Ok(Vec::new());
+            return Ok(Speech::None);
         }
         let probs = self.probabilities(&pcm.samples)?;
         let sample = probs.iter().take(10).copied().collect::<Vec<_>>();
@@ -154,20 +152,7 @@ impl SpeechSegmenter for SileroSegmenter {
             max_prob,
             "silero segmentation done"
         );
-        // Distinguish a genuinely-quiet input from a broken VAD: a
-        // healthy run on speech tops max_prob > 0.99, on full silence
-        // it sits at 0.001..0.005. Anything in between is whisper-
-        // territory and should not raise alarm; anything under 0.1 with
-        // zero segments means the model itself produced no signal --
-        // likely a code/model regression rather than a quiet recording.
-        if is_deaf(segments.is_empty(), max_prob) {
-            error!(
-                max_prob,
-                threshold = DEAF_THRESHOLD,
-                "silero produced no speech signal at all -- model may be broken"
-            );
-        }
-        Ok(segments)
+        Ok(classify(segments, max_prob))
     }
 }
 
@@ -230,13 +215,6 @@ pub fn assemble_segments(samples: &[f32], probs: &[f32], p: &SileroParams) -> Ve
 
 fn ms_to_windows(ms: u32) -> usize {
     (ms / WINDOW_MS) as usize
-}
-
-/// True when the VAD output looks pathological (no segments AND the
-/// peak per-window probability never rose above `DEAF_THRESHOLD`).
-/// Extracted so the trip-wire stays reachable from tests.
-fn is_deaf(segments_empty: bool, max_prob: f32) -> bool {
-    segments_empty && max_prob < DEAF_THRESHOLD
 }
 
 #[cfg(test)]

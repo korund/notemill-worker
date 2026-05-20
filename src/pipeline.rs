@@ -3,10 +3,21 @@ use std::time::Instant;
 use tracing::{info, warn};
 
 use crate::preprocess::chunker::Chunk;
-use crate::preprocess::{Preprocess, Segment};
+use crate::preprocess::{Preprocess, Segment, Speech};
 use crate::{decode, engine, input, output, Result};
 
 const SAMPLE_RATE: u32 = 16_000;
+
+/// Result of a single pipeline run, surfaced to the job runner so it
+/// can pick the right user-facing notification.
+#[derive(Debug, PartialEq, Eq)]
+pub enum RunOutcome {
+    /// Transcript was produced and written to the sink.
+    Written,
+    /// Segmenter reported `Speech::None` (genuinely silent input); no
+    /// transcription was attempted and nothing was written.
+    NoSpeech,
+}
 
 pub struct Pipeline {
     pub decoder: Box<dyn decode::AudioDecoder>,
@@ -20,10 +31,13 @@ impl Pipeline {
         source: &dyn input::AudioSource,
         sink: &mut dyn output::OutputSink,
         fm: Option<&str>,
-    ) -> Result<()> {
+    ) -> Result<RunOutcome> {
         let raw = source.read()?;
         let pcm = self.decoder.decode(&raw)?;
-        let segments = self.segment(pcm)?;
+        let segments = match self.segment(pcm)? {
+            Some(s) => s,
+            None => return Ok(RunOutcome::NoSpeech),
+        };
         let chunks = self.chunk(segments);
 
         let mut parts: Vec<(String, bool)> = Vec::with_capacity(chunks.len());
@@ -46,18 +60,28 @@ impl Pipeline {
             Some(prefix) => format!("{}{}\n", prefix, text),
             None => format!("{}\n", text),
         };
-        sink.write(&body)
+        sink.write(&body)?;
+        Ok(RunOutcome::Written)
     }
 
-    fn segment(&mut self, pcm: decode::Pcm16kMono) -> Result<Vec<Segment>> {
+    /// Returns `Some(segments)` to transcribe, or `None` when the
+    /// segmenter classified the input as `Speech::None` and the caller
+    /// should short-circuit.
+    fn segment(&mut self, pcm: decode::Pcm16kMono) -> Result<Option<Vec<Segment>>> {
         let Some(seg) = self.preprocess.segmenter.as_mut() else {
-            return Ok(vec![full_segment(pcm)]);
+            return Ok(Some(vec![full_segment(pcm)]));
         };
-        let segments = seg.segment(&pcm)?;
-        if segments.is_empty() {
-            warn!("vad found no speech, falling back to full audio");
-            return Ok(vec![full_segment(pcm)]);
-        }
+        let segments = match seg.segment(&pcm)? {
+            Speech::Detected(segments) => segments,
+            Speech::Faint => {
+                warn!("vad found no speech above threshold, falling back to full audio");
+                return Ok(Some(vec![full_segment(pcm)]));
+            }
+            Speech::None => {
+                info!("vad classified input as silent, skipping transcription");
+                return Ok(None);
+            }
+        };
         let total_ms: u32 = segments.last().map(|s| s.end_ms).unwrap_or(0);
         let kept_samples: usize = segments.iter().map(|s| s.pcm.len()).sum();
         let original_ms = (pcm.samples.len() as u64 * 1000) / SAMPLE_RATE as u64;
@@ -66,7 +90,7 @@ impl Pipeline {
             n_segments = segments.len(),
             original_ms, kept_ms, total_ms, "vad applied"
         );
-        Ok(segments)
+        Ok(Some(segments))
     }
 
     fn chunk(&self, segments: Vec<Segment>) -> Vec<Chunk> {
@@ -148,3 +172,7 @@ impl ModelGuard {
         self.pipeline.is_some()
     }
 }
+
+#[cfg(test)]
+mod tests;
+

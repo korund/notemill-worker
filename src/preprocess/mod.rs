@@ -6,7 +6,10 @@ use crate::decode::Pcm16kMono;
 use crate::Result;
 
 pub mod chunker;
+pub mod deafness;
 pub mod vad;
+
+pub use deafness::Speech;
 
 /// Bundle of preprocess stages that sit between decode and transcribe.
 /// Both stages are optional: when both are `None` the pipeline feeds the
@@ -50,12 +53,14 @@ pub struct Segment {
     pub pcm: Vec<f32>,
 }
 
-/// Produces a list of speech segments for a single decoded audio buffer.
+/// Classifies a single decoded audio buffer into a `Speech` verdict.
 ///
-/// Implementations may return an empty Vec when no speech is detected; the
-/// caller decides whether to fall back to the original PCM.
+/// Implementations bundle "the segments we found" with "what the model
+/// heard overall" so the pipeline can distinguish a silent recording
+/// (`Speech::None`) from a near-threshold one (`Speech::Faint`) without
+/// recomputing diagnostics. See [`deafness`] for the classifier.
 pub trait SpeechSegmenter {
-    fn segment(&mut self, pcm: &Pcm16kMono) -> Result<Vec<Segment>>;
+    fn segment(&mut self, pcm: &Pcm16kMono) -> Result<Speech>;
 }
 
 /// Build a segmenter from an optional audio block. Returns `None` when VAD
