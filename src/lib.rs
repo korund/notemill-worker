@@ -13,6 +13,7 @@ pub mod input;
 pub mod models;
 pub mod output;
 pub mod pipeline;
+pub mod preprocess;
 pub mod state;
 
 pub use error::{Error, Result};

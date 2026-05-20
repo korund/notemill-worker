@@ -128,6 +128,7 @@ pub fn run(common: CommonRunArgs) -> Result<()> {
 
     let reg_for_guard = registry.clone();
     let guard_model_name = model_name.clone();
+    let audio_cfg = cfg.audio.clone();
     let guard = ModelGuard::new(
         Box::new(move || {
             let status = reg_for_guard.get(&guard_model_name).ok_or_else(|| {
@@ -137,6 +138,7 @@ pub fn run(common: CommonRunArgs) -> Result<()> {
                 ModelStatus::Ready(handle) => Ok(Pipeline {
                     decoder: Box::new(decode::DefaultDecoder::new()),
                     transcriber: engine::build(&handle)?,
+                    segmenter: crate::preprocess::segmenter_from_audio(audio_cfg.as_ref())?,
                 }),
                 ModelStatus::Pulling => Err(Error::Model("model still downloading".into())),
                 ModelStatus::Failed(msg) => Err(Error::Model(msg)),

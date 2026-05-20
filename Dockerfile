@@ -2,6 +2,11 @@ ARG ORT_VERSION=1.26.0
 # sha256 of onnxruntime-linux-x64-${ORT_VERSION}.tgz from https://github.com/microsoft/onnxruntime/releases
 ARG ORT_SHA256=1254da24fb389cf39dc0ff3451ab48301740ffbfcbaf646849df92f80ee92c57
 
+# Silero VAD ONNX model, pinned by tag + sha256.
+# Source: https://github.com/snakers4/silero-vad/releases
+ARG SILERO_VAD_VERSION=6.2.1
+ARG SILERO_VAD_SHA256=1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3
+
 FROM debian:trixie-slim AS ortfetch
 ARG ORT_VERSION
 ARG ORT_SHA256
@@ -10,6 +15,13 @@ ADD --checksum=sha256:${ORT_SHA256} \
     /tmp/ort.tgz
 RUN tar -xzf /tmp/ort.tgz -C /opt/ \
     && cp /opt/onnxruntime-linux-x64-${ORT_VERSION}/lib/libonnxruntime.so.${ORT_VERSION} /opt/libonnxruntime.so
+
+FROM debian:trixie-slim AS silerofetch
+ARG SILERO_VAD_VERSION
+ARG SILERO_VAD_SHA256
+ADD --checksum=sha256:${SILERO_VAD_SHA256} \
+    https://github.com/snakers4/silero-vad/raw/refs/tags/v${SILERO_VAD_VERSION}/src/silero_vad/data/silero_vad.onnx \
+    /opt/silero/silero_vad.onnx
 
 FROM rust:1-slim-trixie AS build
 
@@ -44,6 +56,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 COPY --from=build /app/target/release/notemill-worker ./
 COPY --from=ortfetch /opt/libonnxruntime.so /usr/local/lib/libonnxruntime.so
+COPY --from=silerofetch /opt/silero/silero_vad.onnx /opt/silero/silero_vad.onnx
 RUN ldconfig
 
 ENTRYPOINT ["./notemill-worker"]

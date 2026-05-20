@@ -16,6 +16,7 @@ fn empty_config() -> Config {
         },
         input: None,
         ffmpeg: None,
+        audio: None,
     }
 }
 

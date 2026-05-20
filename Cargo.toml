@@ -8,7 +8,7 @@ license = "MIT"
 # Default: model download is on (lightweight, no native build deps).
 # Heavy native modules (engine, decode) stay opt-in until implemented.
 default = ["download"]
-engine-transcribe = ["dep:transcribe-rs"]
+engine-transcribe = ["dep:transcribe-rs", "dep:ort"]
 decode-ffmpeg = ["dep:ffmpeg-next"]
 download = ["dep:reqwest", "dep:futures-util", "dep:indicatif", "dep:tar", "dep:flate2"]
 full = ["engine-transcribe", "decode-ffmpeg", "download"]
@@ -35,6 +35,9 @@ mime_guess = { version = "2", default-features = false, features = ["rev-mapping
 
 # Engine (handy uses the same crate; CPU path on Linux).
 transcribe-rs = { version = "0.3.8", features = ["whisper-cpp", "onnx"], optional = true }
+# ORT bindings used directly for silero-vad inference. Version pinned to match
+# what transcribe-rs resolves -- two ort versions in one binary would break ABI.
+ort = { version = "2.0.0-rc.12", optional = true }
 
 # Audio decoding via ffmpeg (libav* linked at build time; vendored in Docker).
 ffmpeg-next = { version = "7", optional = true }

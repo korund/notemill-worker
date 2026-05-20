@@ -1271,6 +1271,7 @@ dependencies = [
  "hex",
  "indicatif",
  "mime_guess",
+ "ort",
  "reqwest",
  "rusqlite",
  "serde",

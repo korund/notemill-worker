@@ -15,6 +15,89 @@ pub struct Config {
     pub input: Option<InputConfig>,
     #[serde(default)]
     pub ffmpeg: Option<FfmpegConfig>,
+    #[serde(default)]
+    pub audio: Option<AudioConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct AudioConfig {
+    #[serde(default)]
+    pub preprocess: PreprocessConfig,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct PreprocessConfig {
+    #[serde(default)]
+    pub vad: VadConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct VadConfig {
+    /// Run silero VAD before transcription. Default: true.
+    #[serde(default = "default_vad_enabled")]
+    pub enabled: bool,
+    /// Speech probability cutoff (0.0..1.0). Default: 0.5.
+    #[serde(default = "default_vad_threshold")]
+    pub threshold: f32,
+    /// Speech runs shorter than this are dropped. Default: 250 ms.
+    #[serde(default = "default_vad_min_speech_ms")]
+    pub min_speech_ms: u32,
+    /// Silence shorter than this between speech runs is kept (runs merge).
+    /// Default: 500 ms.
+    #[serde(default = "default_vad_min_silence_ms")]
+    pub min_silence_ms: u32,
+    /// Pad each detected segment with this much audio on both sides
+    /// (clamped to the original buffer). Default: 100 ms.
+    #[serde(default = "default_vad_speech_pad_ms")]
+    pub speech_pad_ms: u32,
+    /// Path to silero_vad.onnx. Falls back to $SILERO_VAD_MODEL, then to
+    /// /opt/silero/silero_vad.onnx.
+    #[serde(default)]
+    pub model_path: Option<PathBuf>,
+}
+
+impl Default for VadConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_vad_enabled(),
+            threshold: default_vad_threshold(),
+            min_speech_ms: default_vad_min_speech_ms(),
+            min_silence_ms: default_vad_min_silence_ms(),
+            speech_pad_ms: default_vad_speech_pad_ms(),
+            model_path: None,
+        }
+    }
+}
+
+fn default_vad_enabled() -> bool {
+    true
+}
+fn default_vad_threshold() -> f32 {
+    0.5
+}
+fn default_vad_min_speech_ms() -> u32 {
+    250
+}
+fn default_vad_min_silence_ms() -> u32 {
+    500
+}
+fn default_vad_speech_pad_ms() -> u32 {
+    100
+}
+
+impl VadConfig {
+    /// Resolve model path with the fallback chain.
+    pub fn resolve_model_path(&self) -> PathBuf {
+        if let Some(p) = self.model_path.as_ref() {
+            return p.clone();
+        }
+        if let Ok(env) = std::env::var("SILERO_VAD_MODEL") {
+            if !env.is_empty() {
+                return PathBuf::from(env);
+            }
+        }
+        PathBuf::from("/opt/silero/silero_vad.onnx")
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]

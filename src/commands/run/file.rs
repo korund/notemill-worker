@@ -71,9 +71,11 @@ pub fn run(
         .and_then(crate::output::frontmatter::render_from_spec);
 
     let source = input::LocalFileSource::new(input_path);
+    let segmenter = crate::preprocess::segmenter_from_config(&cfg)?;
     let mut pipeline = Pipeline {
         decoder: Box::new(decode::DefaultDecoder::new()),
         transcriber: engine::build(&model_handle)?,
+        segmenter,
     };
     pipeline.run_one(&source, sink.as_mut(), fm.as_deref())
 }

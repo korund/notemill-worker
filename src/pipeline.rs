@@ -1,12 +1,14 @@
 use std::time::Instant;
 
-use tracing::info;
+use tracing::{info, warn};
 
+use crate::preprocess::SpeechSegmenter;
 use crate::{decode, engine, input, output, Result};
 
 pub struct Pipeline {
     pub decoder: Box<dyn decode::AudioDecoder>,
     pub transcriber: Box<dyn engine::Transcriber>,
+    pub segmenter: Option<Box<dyn SpeechSegmenter>>,
 }
 
 impl Pipeline {
@@ -18,12 +20,38 @@ impl Pipeline {
     ) -> Result<()> {
         let raw = source.read()?;
         let pcm = self.decoder.decode(&raw)?;
-        let text = self.transcriber.transcribe(&pcm)?;
+        let speech = self.apply_vad(pcm)?;
+        let text = self.transcriber.transcribe(&speech)?;
         let body = match fm {
             Some(prefix) => format!("{}{}\n", prefix, text),
             None => format!("{}\n", text),
         };
         sink.write(&body)
+    }
+
+    fn apply_vad(&mut self, pcm: decode::Pcm16kMono) -> Result<decode::Pcm16kMono> {
+        let Some(seg) = self.segmenter.as_mut() else {
+            return Ok(pcm);
+        };
+        let segments = seg.segment(&pcm)?;
+        if segments.is_empty() {
+            warn!("vad found no speech, falling back to full audio");
+            return Ok(pcm);
+        }
+        let total: usize = segments.iter().map(|s| s.pcm.len()).sum();
+        let mut combined = Vec::with_capacity(total);
+        for s in &segments {
+            combined.extend_from_slice(&s.pcm);
+        }
+        let original_ms = (pcm.samples.len() as u64 * 1000) / 16_000;
+        let kept_ms = (combined.len() as u64 * 1000) / 16_000;
+        info!(
+            n_segments = segments.len(),
+            original_ms,
+            kept_ms,
+            "vad applied"
+        );
+        Ok(decode::Pcm16kMono { samples: combined })
     }
 }
 
