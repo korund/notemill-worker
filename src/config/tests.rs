@@ -22,7 +22,10 @@ fn minimal_config_only_output_section() {
     let cfg = parse("output: {}\n");
     assert!(cfg.model.is_none());
     assert!(cfg.input.is_none());
-    assert!(cfg.audio.is_none());
+    // Missing `audio:` section materializes the default block so VAD and
+    // chunking are on out of the box (prevents OOM on long recordings).
+    assert!(cfg.audio.preprocess.vad.enabled);
+    assert!(cfg.audio.preprocess.chunking.enabled);
     assert!(cfg.output.sink.is_none());
     assert!(cfg.output.couchdb.is_none());
     assert!(cfg.output.file.is_none());
@@ -266,11 +269,7 @@ fn override_invalid_yaml_value_returns_error() {
 #[test]
 fn vad_config_model_name_defaults_to_silero_vad_v6() {
     let cfg = parse("output: {}\naudio:\n  preprocess:\n    vad: {}\n");
-    let vad = cfg
-        .audio
-        .expect("audio block present")
-        .preprocess
-        .vad;
+    let vad = cfg.audio.preprocess.vad;
     assert_eq!(vad.model_name, "silero-vad-v6");
 }
 
@@ -279,7 +278,7 @@ fn vad_config_model_name_explicit_value_preserved() {
     let cfg = parse(
         "output: {}\naudio:\n  preprocess:\n    vad:\n      model_name: my-custom-vad\n",
     );
-    let vad = cfg.audio.unwrap().preprocess.vad;
+    let vad = cfg.audio.preprocess.vad;
     assert_eq!(vad.model_name, "my-custom-vad");
 }
 

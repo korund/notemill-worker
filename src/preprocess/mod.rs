@@ -35,7 +35,7 @@ impl Preprocess {
     /// `ModelRegistry` before calling this. Pass `None` when VAD is disabled
     /// or the registry is not available.
     pub fn from_config(cfg: &Config, vad_model_path: Option<PathBuf>) -> Result<Self> {
-        Self::from_audio(cfg.audio.as_ref(), vad_model_path)
+        Self::from_audio(Some(&cfg.audio), vad_model_path)
     }
 
     /// Build from an optional audio block.

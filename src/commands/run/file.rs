@@ -25,17 +25,8 @@ pub fn run(
     let model_handle = manager.resolve(&model_name, family)?;
 
     // Resolve VAD model path when VAD is enabled (one-shot: pull synchronously).
-    let vad_path = if cfg
-        .audio
-        .as_ref()
-        .map(|a| a.preprocess.vad.enabled)
-        .unwrap_or(false)
-    {
-        let vad_name = cfg
-            .audio
-            .as_ref()
-            .map(|a| a.preprocess.vad.model_name.clone())
-            .unwrap_or_else(crate::config::default_vad_model_name);
+    let vad_path = if cfg.audio.preprocess.vad.enabled {
+        let vad_name = cfg.audio.preprocess.vad.model_name.clone();
         match manager.resolve_vad(&vad_name) {
             Ok(h) => Some(h.path),
             Err(_) => {

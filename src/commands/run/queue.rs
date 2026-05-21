@@ -130,9 +130,10 @@ pub fn run(common: CommonRunArgs) -> Result<()> {
     // semantics as the transcription model.
     let vad_model_name_opt = cfg
         .audio
-        .as_ref()
-        .filter(|a| a.preprocess.vad.enabled)
-        .map(|a| a.preprocess.vad.model_name.clone());
+        .preprocess
+        .vad
+        .enabled
+        .then(|| cfg.audio.preprocess.vad.model_name.clone());
     if let Some(ref vad_name) = vad_model_name_opt {
         registry.init_vad_models(
             std::sync::Arc::clone(&manager),
@@ -180,7 +181,7 @@ pub fn run(common: CommonRunArgs) -> Result<()> {
 
             Ok(Pipeline {
                 decoder: Box::new(decode::DefaultDecoder::new()),
-                preprocess: crate::preprocess::Preprocess::from_audio(audio_cfg.as_ref(), vad_path)?,
+                preprocess: crate::preprocess::Preprocess::from_audio(Some(&audio_cfg), vad_path)?,
                 transcriber: engine::build(&handle)?,
             })
         }),

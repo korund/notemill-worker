@@ -15,7 +15,7 @@ fn empty_config() -> Config {
             name: NamingConfig::default(),
         },
         input: None,
-        audio: None,
+        audio: Default::default(),
     }
 }
 
