@@ -114,3 +114,93 @@ fn notify_result_no_speech_roundtrip() {
 fn dedup_key_format() {
     assert_eq!(TranscribeJob::dedup_key_for(123, 45), "tg:123:45");
 }
+
+#[test]
+fn transcribe_job_rejects_unknown_field() {
+    let raw = r#"{
+        "v": 1,
+        "type": "transcribe",
+        "dedup_key": "tg:1:2",
+        "audio_key": "audio/x.oga",
+        "source": {
+            "kind": "telegram",
+            "chat_id": 1,
+            "message_id": 2,
+            "update_id": 3,
+            "received_at": "2026-05-07T10:15:30Z"
+        },
+        "unexpected_field": 42
+    }"#;
+    let result: Result<TranscribeJob, _> = serde_json::from_str(raw);
+    assert!(result.is_err(), "expected error for unknown field");
+}
+
+#[test]
+fn transcribe_job_unknown_kind_deserializes_to_unknown_variant() {
+    let raw = r#"{
+        "v": 1,
+        "type": "future_kind",
+        "dedup_key": "tg:1:2",
+        "audio_key": "audio/x.oga",
+        "source": {
+            "kind": "telegram",
+            "chat_id": 1,
+            "message_id": 2,
+            "update_id": 3,
+            "received_at": "2026-05-07T10:15:30Z"
+        }
+    }"#;
+    let job: TranscribeJob = serde_json::from_str(raw).unwrap();
+    assert_eq!(job.kind, TranscribeKind::Unknown);
+}
+
+#[test]
+fn transcribe_job_unknown_telegram_kind() {
+    let raw = r#"{
+        "v": 1,
+        "type": "transcribe",
+        "dedup_key": "tg:1:2",
+        "audio_key": "audio/x.oga",
+        "source": {
+            "kind": "future_platform",
+            "chat_id": 1,
+            "message_id": 2,
+            "update_id": 3,
+            "received_at": "2026-05-07T10:15:30Z"
+        }
+    }"#;
+    let job: TranscribeJob = serde_json::from_str(raw).unwrap();
+    assert_eq!(job.source.kind, TelegramKind::Unknown);
+}
+
+#[test]
+fn wire_incompat_error_code_roundtrip() {
+    let r = NotifyResult {
+        v: WIRE_VERSION,
+        kind: NotifyKind::NotifyResult,
+        dedup_key: "tg:1:2".into(),
+        source: SourceRef {
+            kind: TelegramKind::Telegram,
+            chat_id: 1,
+            message_id: 2,
+            update_id: 3,
+        },
+        result: JobResult::Error {
+            error_code: ErrorCode::WireIncompat,
+            error_msg: "wire version mismatch: got 2, expected 1".into(),
+            duration_ms: 0,
+        },
+    };
+    let s = serde_json::to_string(&r).unwrap();
+    assert!(
+        s.contains("\"error_code\":\"wire_incompat\""),
+        "serialized form: {s}"
+    );
+    let back: NotifyResult = serde_json::from_str(&s).unwrap();
+    match back.result {
+        JobResult::Error { error_code, .. } => {
+            assert_eq!(error_code, ErrorCode::WireIncompat);
+        }
+        other => panic!("expected Error, got {other:?}"),
+    }
+}

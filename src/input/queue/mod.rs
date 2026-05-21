@@ -32,8 +32,8 @@ use crate::{Error, Result};
 
 use bucket::{is_not_found, Bucket, BucketAudioSource};
 use job::{
-    ErrorCode, JobResult, NoSpeechReason, NotifyKind, NotifyResult, SourceRef, TranscribeJob,
-    WIRE_VERSION,
+    ErrorCode, JobResult, NoSpeechReason, NotifyKind, NotifyResult, SourceRef, TelegramKind,
+    TranscribeJob, TranscribeKind, WIRE_VERSION,
 };
 use processed::{replay_notify, ProcessedRecord, ProcessedStatus, ProcessedStore};
 use transport::Queue;
@@ -211,15 +211,20 @@ where
             "popped job"
         );
 
-        // Wire-format version check; mismatched payloads were already routed
-        // to DLQ by the queue backend if they got that far. Defensive log only.
-        if job.v != WIRE_VERSION {
-            warn!(
-                got = job.v,
-                expected = WIRE_VERSION,
-                "wire-version mismatch; acking to skip"
-            );
-            self.transcribe_q.ack(&receipt).await?;
+        // Wire-format compat check.
+        //
+        // Two signals detect a producer-ahead condition:
+        //   1. Numeric: job.v > WIRE_VERSION.
+        //   2. Structural: unknown enum variant deserialized as Unknown.
+        //
+        // Producer-ahead is an alarm condition: route to DLQ and notify bot.
+        // Payloads with job.v < WIRE_VERSION (none today) fall through and are
+        // processed normally under backward-compat rules.
+        let is_wire_incompat = job.v > WIRE_VERSION
+            || job.kind == TranscribeKind::Unknown
+            || job.source.kind == TelegramKind::Unknown;
+        if is_wire_incompat {
+            self.finalise_wire_incompat(&job, &receipt).await?;
             return Ok(true);
         }
 
@@ -443,6 +448,55 @@ where
         } else {
             let delay = next_visibility_sec(receive_count);
             self.transcribe_q.nack_with_delay(receipt, delay).await?;
+        }
+        Ok(())
+    }
+
+    /// Called when the incoming job signals that the producer is ahead of the
+    /// worker (version number too high, or unrecognised enum variant). The job
+    /// is acked (removed from the queue), a WireIncompat error is persisted in
+    /// the idempotency table, and a NotifyResult::Error is sent to the bot so
+    /// the operator can investigate immediately.
+    async fn finalise_wire_incompat(
+        &mut self,
+        job: &TranscribeJob,
+        receipt: &transport::Receipt,
+    ) -> Result<()> {
+        warn!(
+            got_v = job.v,
+            expected_v = WIRE_VERSION,
+            dedup_key = %job.dedup_key,
+            "wire-incompat job; routing to DLQ path"
+        );
+        let rec = ProcessedRecord {
+            dedup_key: job.dedup_key.clone(),
+            finished_at_ms: now_ms(),
+            status: ProcessedStatus::Error {
+                error_code: ErrorCode::WireIncompat,
+            },
+        };
+        self.processed.record(&rec).await?;
+        let notify = NotifyResult {
+            v: WIRE_VERSION,
+            kind: NotifyKind::NotifyResult,
+            dedup_key: job.dedup_key.clone(),
+            source: SourceRef::from_job(&job.source),
+            result: JobResult::Error {
+                error_code: ErrorCode::WireIncompat,
+                error_msg: format!(
+                    "wire version mismatch: got {}, expected {}",
+                    job.v, WIRE_VERSION
+                ),
+                duration_ms: 0,
+            },
+        };
+        if let Err(e) = self.notify_q.enqueue(notify).await {
+            warn!(error = %e, "notify enqueue failed (wire_incompat branch)");
+        }
+        self.transcribe_q.ack(receipt).await?;
+        // Best-effort cleanup of the bucket object.
+        if let Err(e) = self.bucket.delete(&job.audio_key).await {
+            warn!(error = %e, audio_key = %job.audio_key, "bucket delete failed (wire_incompat branch)");
         }
         Ok(())
     }

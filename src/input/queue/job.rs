@@ -6,13 +6,18 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Current wire-format version. Mismatched payloads are routed to DLQ by the
-/// consumer (see contract section 9).
+/// Current wire-format version. Monotonic counter bumped ONLY on breaking
+/// changes to the job schema. The worker is the versioning authority: it
+/// accepts older producers (v <= WIRE_VERSION, fills defaults) but treats
+/// producer-ahead payloads (v > WIRE_VERSION, or unknown enum variants) as an
+/// alarm condition -- they are routed to DLQ and the bot is notified via a
+/// WireIncompat error so the operator can investigate immediately.
 pub const WIRE_VERSION: u32 = 1;
 
 // --- TranscribeJob (queue `transcribe`) ----------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TranscribeJob {
     pub v: u32,
     #[serde(rename = "type")]
@@ -28,9 +33,14 @@ pub struct TranscribeJob {
 pub enum TranscribeKind {
     #[serde(rename = "transcribe")]
     Transcribe,
+    /// Deserialized from an unrecognised string value. Signals that the
+    /// producer is ahead of the worker; the job will be routed to DLQ.
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TelegramSource {
     #[serde(rename = "kind")]
     pub kind: TelegramKind,
@@ -47,6 +57,10 @@ pub struct TelegramSource {
 pub enum TelegramKind {
     #[serde(rename = "telegram")]
     Telegram,
+    /// Deserialized from an unrecognised string value. Signals that the
+    /// producer is ahead of the worker; the job will be routed to DLQ.
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -138,6 +152,10 @@ pub enum ErrorCode {
     OutputFailed,
     /// Anything else.
     Internal,
+    /// Incoming job has a wire-format version or structure that the worker
+    /// does not understand (producer is ahead of worker). Job is routed to
+    /// DLQ and the bot is notified so the operator can investigate.
+    WireIncompat,
 }
 
 // --- Helpers -------------------------------------------------------------

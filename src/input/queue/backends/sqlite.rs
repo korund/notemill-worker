@@ -500,6 +500,7 @@ fn error_code_str(c: ErrorCode) -> &'static str {
         ErrorCode::EngineFailed => "engine_failed",
         ErrorCode::OutputFailed => "output_failed",
         ErrorCode::Internal => "internal",
+        ErrorCode::WireIncompat => "wire_incompat",
     }
 }
 
@@ -523,6 +524,7 @@ fn parse_error_code(s: &str) -> Result<ErrorCode> {
         "engine_failed" => ErrorCode::EngineFailed,
         "output_failed" => ErrorCode::OutputFailed,
         "internal" => ErrorCode::Internal,
+        "wire_incompat" => ErrorCode::WireIncompat,
         other => return Err(Error::Queue(format!("unknown error_code: {other}"))),
     })
 }
