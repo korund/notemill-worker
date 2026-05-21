@@ -2,6 +2,8 @@ use std::time::Instant;
 
 use tracing::{info, warn};
 
+mod join;
+
 use crate::preprocess::chunker::Chunk;
 use crate::preprocess::{Preprocess, Segment, Speech};
 use crate::{decode, engine, input, output, Result};
@@ -54,7 +56,7 @@ impl Pipeline {
             );
             parts.push((text, c.has_overlap_with_next));
         }
-        let text = crate::preprocess::chunker::join_texts(&parts);
+        let text = join::join_texts(&parts);
 
         let body = match fm {
             Some(prefix) => format!("{}{}\n", prefix, text),
