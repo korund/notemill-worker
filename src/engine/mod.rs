@@ -21,7 +21,11 @@ pub fn build(model: &ResolvedModel) -> Result<Box<dyn Transcriber>> {
     {
         use transcribe_rs::SpeechModel;
 
-        let boxed: Box<dyn SpeechModel> = match model.family {
+        let family = model.family.ok_or_else(|| {
+            Error::Engine("transcribe family expected, got VAD-only model".to_string())
+        })?;
+
+        let boxed: Box<dyn SpeechModel> = match family {
             ModelFamily::Whisper => {
                 let engine = transcribe_rs::whisper_cpp::WhisperEngine::load(&model.path)
                     .map_err(|e| Error::Engine(format!("whisper load: {e}")))?;

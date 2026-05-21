@@ -162,9 +162,9 @@ audio:
       # Pad each detected segment with this much audio on both sides to
       # avoid clipping consonants at boundaries. ms.
       speech_pad_ms: 100
-      # Path to silero_vad.onnx. If unset, falls back to $SILERO_VAD_MODEL,
-      # then to /opt/silero/silero_vad.onnx (the location used inside the Docker image).
-      model_path: null
+      # Catalog name of the VAD model. Must match an entry in the [[model.vad]]
+      # section of models.toml. The model is downloaded automatically if absent.
+      model_name: "silero-vad-v6"
 
     # Chunking caps the length of audio fed to the encoder in one pass.
     # Self-attention memory grows quadratically with sequence length, so

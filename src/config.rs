@@ -89,10 +89,9 @@ pub struct VadConfig {
     /// (clamped to the original buffer). Default: 100 ms.
     #[serde(default = "default_vad_speech_pad_ms")]
     pub speech_pad_ms: u32,
-    /// Path to silero_vad.onnx. Falls back to $SILERO_VAD_MODEL, then to
-    /// /opt/silero/silero_vad.onnx.
-    #[serde(default)]
-    pub model_path: Option<PathBuf>,
+    /// Catalog name of the VAD model. Default: "silero-vad-v6".
+    #[serde(default = "default_vad_model_name")]
+    pub model_name: String,
 }
 
 impl Default for VadConfig {
@@ -103,7 +102,7 @@ impl Default for VadConfig {
             min_speech_ms: default_vad_min_speech_ms(),
             min_silence_ms: default_vad_min_silence_ms(),
             speech_pad_ms: default_vad_speech_pad_ms(),
-            model_path: None,
+            model_name: default_vad_model_name(),
         }
     }
 }
@@ -123,20 +122,8 @@ fn default_vad_min_silence_ms() -> u32 {
 fn default_vad_speech_pad_ms() -> u32 {
     100
 }
-
-impl VadConfig {
-    /// Resolve model path with the fallback chain.
-    pub fn resolve_model_path(&self) -> PathBuf {
-        if let Some(p) = self.model_path.as_ref() {
-            return p.clone();
-        }
-        if let Ok(env) = std::env::var("SILERO_VAD_MODEL") {
-            if !env.is_empty() {
-                return PathBuf::from(env);
-            }
-        }
-        PathBuf::from("/opt/silero/silero_vad.onnx")
-    }
+pub fn default_vad_model_name() -> String {
+    "silero-vad-v6".to_string()
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]

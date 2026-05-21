@@ -22,7 +22,7 @@ ARG SILERO_VAD_VERSION
 ARG SILERO_VAD_SHA256
 ADD --checksum=sha256:${SILERO_VAD_SHA256} \
     https://github.com/snakers4/silero-vad/raw/refs/tags/v${SILERO_VAD_VERSION}/src/silero_vad/data/silero_vad.onnx \
-    /opt/silero/silero_vad.onnx
+    /app/models/silero_vad.onnx
 
 FROM rust:1-slim-trixie AS build
 
@@ -57,7 +57,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 COPY --from=build /app/target/release/notemill-worker ./
 COPY --from=ortfetch /opt/libonnxruntime.so /usr/local/lib/libonnxruntime.so
-COPY --from=silerofetch /opt/silero/silero_vad.onnx /opt/silero/silero_vad.onnx
+COPY --from=silerofetch /app/models/silero_vad.onnx /app/models/silero_vad.onnx
 RUN ldconfig
 
 ENTRYPOINT ["./notemill-worker"]

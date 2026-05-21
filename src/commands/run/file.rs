@@ -24,6 +24,29 @@ pub fn run(
     let family = resolve::family(&cfg, common.model_family)?;
     let model_handle = manager.resolve(&model_name, family)?;
 
+    // Resolve VAD model path when VAD is enabled (one-shot: pull synchronously).
+    let vad_path = if cfg
+        .audio
+        .as_ref()
+        .map(|a| a.preprocess.vad.enabled)
+        .unwrap_or(false)
+    {
+        let vad_name = cfg
+            .audio
+            .as_ref()
+            .map(|a| a.preprocess.vad.model_name.clone())
+            .unwrap_or_else(crate::config::default_vad_model_name);
+        match manager.resolve_vad(&vad_name) {
+            Ok(h) => Some(h.path),
+            Err(_) => {
+                manager.pull_vad(&vad_name)?;
+                Some(manager.resolve_vad(&vad_name)?.path)
+            }
+        }
+    } else {
+        None
+    };
+
     let sink_kind = resolve::sink(&cfg, common.output, Sink::Stdout);
     let mut sink: Box<dyn output::OutputSink> = match sink_kind {
         Sink::Stdout => {
@@ -73,7 +96,7 @@ pub fn run(
     let source = input::LocalFileSource::new(input_path);
     let mut pipeline = Pipeline {
         decoder: Box::new(decode::DefaultDecoder::new()),
-        preprocess: crate::preprocess::Preprocess::from_config(&cfg)?,
+        preprocess: crate::preprocess::Preprocess::from_config(&cfg, vad_path)?,
         transcriber: engine::build(&model_handle)?,
     };
     pipeline.run_one(&source, sink.as_mut(), fm.as_deref())?;

@@ -75,6 +75,57 @@ impl ModelRegistry {
             }
         }
     }
+
+    /// Initialize VAD models in the registry. Mirror of `init_models` but
+    /// routes through `resolve_vad` / `pull_vad`. VAD models share the same
+    /// `HashMap<String, ModelStatus>` and are keyed by name.
+    pub fn init_vad_models(&self, manager: Arc<Manager>, names: Vec<String>) {
+        for name in names {
+            match manager.resolve_vad(&name) {
+                Ok(handle) => {
+                    info!(model = %name, "VAD model present on disk");
+                    self.set(name, ModelStatus::Ready(handle));
+                }
+                Err(_) => {
+                    if manager.catalog().find_vad(&name).is_some() {
+                        info!(model = %name, "VAD model missing, starting background pull");
+                        self.set(name.clone(), ModelStatus::Pulling);
+                        let reg = self.clone();
+                        let mgr = Arc::clone(&manager);
+                        let model_name = name.clone();
+                        std::thread::spawn(move || {
+                            pull_vad_background(&mgr, &reg, &model_name);
+                        });
+                    } else {
+                        let msg = format!("VAD model `{name}` not in catalog and not on disk");
+                        error!(%msg);
+                        self.set(name, ModelStatus::Failed(msg));
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn pull_vad_background(manager: &Manager, registry: &ModelRegistry, name: &str) {
+    info!(model = %name, "VAD background pull started");
+    if let Err(e) = manager.pull_vad(name) {
+        let msg = format!("VAD background pull failed: {e}");
+        error!(model = %name, %msg);
+        registry.set(name.to_string(), ModelStatus::Failed(msg));
+        return;
+    }
+    match manager.resolve_vad(name) {
+        Ok(handle) => {
+            info!(model = %name, "VAD background pull complete, model ready");
+            registry.set(name.to_string(), ModelStatus::Ready(handle));
+        }
+        Err(e) => {
+            let msg = format!("VAD resolve after pull failed: {e}");
+            error!(model = %name, %msg);
+            registry.set(name.to_string(), ModelStatus::Failed(msg));
+        }
+    }
 }
 
 fn pull_background(

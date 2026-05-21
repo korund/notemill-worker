@@ -1,9 +1,11 @@
 //! Audio preprocessing between decode and transcribe:
 //! speech segmentation (VAD) and, later, chunking.
 
+use std::path::PathBuf;
+
 use crate::config::{AudioConfig, Config};
 use crate::decode::Pcm16kMono;
-use crate::Result;
+use crate::{Error, Result};
 
 pub mod chunker;
 pub mod deafness;
@@ -27,16 +29,25 @@ impl Preprocess {
         }
     }
 
-    /// Build from the top-level Config (convenience for one-shot callers).
-    pub fn from_config(cfg: &Config) -> Result<Self> {
-        Self::from_audio(cfg.audio.as_ref())
+    /// Build from the top-level Config with a pre-resolved VAD model path.
+    ///
+    /// The caller is responsible for resolving `vad_model_path` via the
+    /// `ModelRegistry` before calling this. Pass `None` when VAD is disabled
+    /// or the registry is not available.
+    pub fn from_config(cfg: &Config, vad_model_path: Option<PathBuf>) -> Result<Self> {
+        Self::from_audio(cfg.audio.as_ref(), vad_model_path)
     }
 
-    /// Build from an optional audio block. A missing block disables both
-    /// stages.
-    pub fn from_audio(audio: Option<&AudioConfig>) -> Result<Self> {
+    /// Build from an optional audio block.
+    ///
+    /// `vad_model_path` must be `Some` when `vad.enabled` is true; if it is
+    /// `None` while VAD is enabled, returns `Error::Config`.
+    pub fn from_audio(
+        audio: Option<&AudioConfig>,
+        vad_model_path: Option<PathBuf>,
+    ) -> Result<Self> {
         Ok(Self {
-            segmenter: segmenter_from_audio(audio)?,
+            segmenter: segmenter_from_audio(audio, vad_model_path)?,
             chunker: chunker_from_audio(audio),
         })
     }
@@ -67,6 +78,7 @@ pub trait SpeechSegmenter {
 /// is disabled or the audio block is absent.
 fn segmenter_from_audio(
     audio: Option<&AudioConfig>,
+    vad_model_path: Option<PathBuf>,
 ) -> Result<Option<Box<dyn SpeechSegmenter>>> {
     let Some(audio) = audio else {
         return Ok(None);
@@ -75,13 +87,15 @@ fn segmenter_from_audio(
     if !vc.enabled {
         return Ok(None);
     }
+    let path = vad_model_path.ok_or_else(|| {
+        Error::Config("vad enabled but model path not provided".into())
+    })?;
     let params = vad::SileroParams {
         threshold: vc.threshold,
         min_speech_ms: vc.min_speech_ms,
         min_silence_ms: vc.min_silence_ms,
         speech_pad_ms: vc.speech_pad_ms,
     };
-    let path = vc.resolve_model_path();
     let seg = vad::SileroSegmenter::new(path, params)?;
     Ok(Some(Box::new(seg)))
 }

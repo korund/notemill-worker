@@ -126,6 +126,20 @@ pub fn run(common: CommonRunArgs) -> Result<()> {
         vec![(model_name.clone(), family)],
     );
 
+    // Register the VAD model when enabled so it follows the same pull-pending
+    // semantics as the transcription model.
+    let vad_model_name_opt = cfg
+        .audio
+        .as_ref()
+        .filter(|a| a.preprocess.vad.enabled)
+        .map(|a| a.preprocess.vad.model_name.clone());
+    if let Some(ref vad_name) = vad_model_name_opt {
+        registry.init_vad_models(
+            std::sync::Arc::clone(&manager),
+            vec![vad_name.clone()],
+        );
+    }
+
     let (sqlite_path, bucket_root, max_receive, visibility_sec, model_loop) =
         resolve_queue_infra(&cfg)?;
 
@@ -138,18 +152,37 @@ pub fn run(common: CommonRunArgs) -> Result<()> {
     let audio_cfg = cfg.audio.clone();
     let guard = ModelGuard::new(
         Box::new(move || {
+            // Resolve transcription model.
             let status = reg_for_guard.get(&guard_model_name).ok_or_else(|| {
                 Error::Model(format!("model `{}` not in registry", guard_model_name))
             })?;
-            match status {
-                ModelStatus::Ready(handle) => Ok(Pipeline {
-                    decoder: Box::new(decode::DefaultDecoder::new()),
-                    preprocess: crate::preprocess::Preprocess::from_audio(audio_cfg.as_ref())?,
-                    transcriber: engine::build(&handle)?,
-                }),
-                ModelStatus::Pulling => Err(Error::Model("model still downloading".into())),
-                ModelStatus::Failed(msg) => Err(Error::Model(msg)),
-            }
+            let handle = match status {
+                ModelStatus::Ready(h) => h,
+                ModelStatus::Pulling => return Err(Error::Model("model still downloading".into())),
+                ModelStatus::Failed(msg) => return Err(Error::Model(msg)),
+            };
+
+            // Resolve VAD model path when VAD is enabled.
+            let vad_path = if let Some(ref vad_name) = vad_model_name_opt {
+                let vad_status = reg_for_guard.get(vad_name).ok_or_else(|| {
+                    Error::Model(format!("VAD model `{vad_name}` not in registry"))
+                })?;
+                match vad_status {
+                    ModelStatus::Ready(h) => Some(h.path.clone()),
+                    ModelStatus::Pulling => {
+                        return Err(Error::Model("VAD model still downloading".into()))
+                    }
+                    ModelStatus::Failed(msg) => return Err(Error::Model(msg)),
+                }
+            } else {
+                None
+            };
+
+            Ok(Pipeline {
+                decoder: Box::new(decode::DefaultDecoder::new()),
+                preprocess: crate::preprocess::Preprocess::from_audio(audio_cfg.as_ref(), vad_path)?,
+                transcriber: engine::build(&handle)?,
+            })
         }),
         std::time::Duration::from_millis(model_loop.unload_after_ms),
     );

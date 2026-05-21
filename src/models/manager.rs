@@ -5,11 +5,13 @@ use crate::{Error, Result};
 use super::catalog::{Catalog, CatalogEntry, ModelFamily};
 
 /// A model ready to use: path to the file or directory and engine family.
+///
+/// `family` is `Some` for transcription models; `None` for VAD models.
 #[derive(Debug, Clone)]
 pub struct ResolvedModel {
     pub name: String,
     pub path: PathBuf,
-    pub family: ModelFamily,
+    pub family: Option<ModelFamily>,
     pub is_directory: bool,
 }
 
@@ -42,11 +44,15 @@ impl Manager {
                 "[remote]"
             };
             let kind = if entry.is_directory { "dir" } else { "file" };
+            let family_str = match entry.family {
+                Some(f) => format!("{f:?}"),
+                None => "vad".to_string(),
+            };
             println!(
-                "  {mark} {name:<20} family={family:?} kind={kind} fs={file}",
+                "  {mark} {name:<20} family={family} kind={kind} fs={file}",
                 mark = mark,
                 name = entry.name,
-                family = entry.family,
+                family = family_str,
                 kind = kind,
                 file = entry.filename,
             );
@@ -131,6 +137,87 @@ impl Manager {
         }
     }
 
+    /// Download a VAD model from the catalog into the local directory.
+    /// Mirror of `pull` but routes through the VAD section.
+    pub fn pull_vad(&self, name: &str) -> Result<()> {
+        let entry = self
+            .catalog
+            .find_vad(name)
+            .ok_or_else(|| Error::Model(format!("unknown VAD model `{name}`")))?;
+
+        if entry.url.trim().is_empty() {
+            return Err(Error::Model(format!(
+                "VAD catalog entry `{name}` has no URL"
+            )));
+        }
+
+        std::fs::create_dir_all(&self.dir)
+            .map_err(|e| Error::Model(format!("create models dir: {e}")))?;
+
+        let dest = self.dir.join(&entry.filename);
+
+        if dest.exists() {
+            match verify_sha256(&dest, entry.sha256.as_deref())? {
+                ShaCheck::Ok => {
+                    tracing::info!(path = %dest.display(), "VAD model already present and verified");
+                    return Ok(());
+                }
+                ShaCheck::SkippedNoExpected => {
+                    tracing::info!(path = %dest.display(), "VAD model already present (no sha256 in catalog)");
+                    return Ok(());
+                }
+                ShaCheck::Mismatch { actual, expected } => {
+                    tracing::warn!(actual, expected, "existing VAD file failed sha256 -- re-downloading");
+                }
+            }
+        }
+
+        download_file(entry, &dest)?;
+
+        match verify_sha256(&dest, entry.sha256.as_deref())? {
+            ShaCheck::Ok | ShaCheck::SkippedNoExpected => Ok(()),
+            ShaCheck::Mismatch { actual, expected } => {
+                let _ = std::fs::remove_file(&dest);
+                Err(Error::Model(format!(
+                    "sha256 mismatch after VAD download: expected {expected}, got {actual}"
+                )))
+            }
+        }
+    }
+
+    /// Resolve a VAD model name to a ResolvedModel (family is always None).
+    pub fn resolve_vad(&self, name: &str) -> Result<ResolvedModel> {
+        let entry = self
+            .catalog
+            .find_vad(name)
+            .ok_or_else(|| Error::Model(format!("unknown VAD model `{name}`")))?;
+
+        let local = self.dir.join(&entry.filename);
+        if !local.is_file() {
+            return Err(Error::Model(format!(
+                "VAD model `{}` not present at {} -- run `{} models pull {}` first",
+                entry.name,
+                local.display(),
+                env!("CARGO_PKG_NAME"),
+                entry.name
+            )));
+        }
+        if let ShaCheck::Mismatch { actual, expected } =
+            verify_sha256(&local, entry.sha256.as_deref())?
+        {
+            return Err(Error::Model(format!(
+                "VAD model `{}` failed sha256: expected {expected}, got {actual}",
+                entry.name
+            )));
+        }
+        Ok(ResolvedModel {
+            name: entry.name.clone(),
+            path: local,
+            family: None,
+            is_directory: false,
+        })
+    }
+
     /// Resolve a `--model` argument (catalog name OR file path) into a ResolvedModel.
     /// For a direct path `family_hint` is required; otherwise the family is inferred from
     /// structure (single file -> Whisper, directory -> error).
@@ -158,7 +245,7 @@ impl Manager {
                     .map(|s| s.to_string_lossy().into_owned())
                     .unwrap_or_else(|| model_arg.to_string()),
                 path: direct.to_path_buf(),
-                family,
+                family: Some(family),
                 is_directory: is_dir,
             });
         }
@@ -197,7 +284,7 @@ impl Manager {
             return Ok(ResolvedModel {
                 name: entry.name.clone(),
                 path: local,
-                family: entry.family,
+                family: entry.family,  // already Option<ModelFamily>
                 is_directory: entry.is_directory,
             });
         }
@@ -252,7 +339,7 @@ impl Manager {
 
         let entry = CatalogEntry {
             name: name.clone(),
-            family,
+            family: Some(family),
             filename,
             url: url.to_string(),
             sha256: Some(sha256),
@@ -324,7 +411,7 @@ fn add_download(
 
     let tmp_entry = CatalogEntry {
         name: name.to_string(),
-        family: ModelFamily::Whisper, // unused for download, just a placeholder
+        family: None, // unused for download, just a placeholder
         filename: filename.to_string(),
         url: url.to_string(),
         sha256: None,
@@ -596,4 +683,60 @@ async fn download_to_path(
     }
     pb.finish_with_message(format!("Downloaded {label}"));
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn temp_test_dir(suffix: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("notes-capture-test-{suffix}"));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn resolve_vad_returns_path_when_model_present() {
+        let dir = temp_test_dir("vad-present");
+        let model_path = dir.join("silero_vad.onnx");
+        fs::write(&model_path, b"fake-onnx").unwrap();
+
+        // Build a manager with no sha256 so verification is skipped.
+        let catalog_src = r#"
+[model]
+[[model.vad]]
+name = "silero-vad-test"
+filename = "silero_vad.onnx"
+url = "https://example.com/silero_vad.onnx"
+is_directory = false
+"#;
+        let (transcribe, vad) =
+            crate::models::catalog::Catalog::parse_toml_pub(catalog_src, "test").unwrap();
+        let catalog = crate::models::Catalog::from_parts(transcribe, vad);
+        let mgr = Manager::new(dir.clone(), catalog);
+
+        let resolved = mgr.resolve_vad("silero-vad-test").unwrap();
+        assert_eq!(resolved.path, model_path);
+        assert!(resolved.family.is_none());
+    }
+
+    #[test]
+    fn resolve_vad_errors_when_model_absent() {
+        let dir = temp_test_dir("vad-absent");
+        let catalog_src = r#"
+[model]
+[[model.vad]]
+name = "silero-vad-test"
+filename = "silero_vad.onnx"
+url = "https://example.com/silero_vad.onnx"
+is_directory = false
+"#;
+        let (transcribe, vad) =
+            crate::models::catalog::Catalog::parse_toml_pub(catalog_src, "test").unwrap();
+        let catalog = crate::models::Catalog::from_parts(transcribe, vad);
+        let mgr = Manager::new(dir.clone(), catalog);
+
+        assert!(mgr.resolve_vad("silero-vad-test").is_err());
+    }
 }

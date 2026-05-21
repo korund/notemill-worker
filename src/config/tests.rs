@@ -260,3 +260,31 @@ fn override_invalid_yaml_value_returns_error() {
     );
     assert!(result.is_err());
 }
+
+// ---------- VadConfig defaults ----------
+
+#[test]
+fn vad_config_model_name_defaults_to_silero_vad_v6() {
+    let cfg = parse("output: {}\naudio:\n  preprocess:\n    vad: {}\n");
+    let vad = cfg
+        .audio
+        .expect("audio block present")
+        .preprocess
+        .vad;
+    assert_eq!(vad.model_name, "silero-vad-v6");
+}
+
+#[test]
+fn vad_config_model_name_explicit_value_preserved() {
+    let cfg = parse(
+        "output: {}\naudio:\n  preprocess:\n    vad:\n      model_name: my-custom-vad\n",
+    );
+    let vad = cfg.audio.unwrap().preprocess.vad;
+    assert_eq!(vad.model_name, "my-custom-vad");
+}
+
+#[test]
+fn vad_config_default_instance_has_model_name() {
+    let v = VadConfig::default();
+    assert_eq!(v.model_name, "silero-vad-v6");
+}
