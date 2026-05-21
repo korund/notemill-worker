@@ -142,9 +142,8 @@ impl SpeechSegmenter for SileroSegmenter {
             return Ok(Speech::None);
         }
         let probs = self.probabilities(&pcm.samples)?;
-        let sample = probs.iter().take(10).copied().collect::<Vec<_>>();
         let max_prob = probs.iter().copied().fold(0.0f32, f32::max);
-        trace!(?sample, max_prob, "vad prob sample");
+        trace!(sample = ?&probs[..probs.len().min(10)], max_prob, "vad prob sample");
         let segments = assemble_segments(&pcm.samples, &probs, &self.params);
         debug!(
             n_windows = probs.len(),
