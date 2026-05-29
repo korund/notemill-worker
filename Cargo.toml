@@ -40,7 +40,7 @@ transcribe-rs = { version = "0.3.8", features = ["whisper-cpp", "onnx"], optiona
 ort = { version = "2.0.0-rc.12", optional = true }
 
 # Audio decoding via ffmpeg (libav* linked at build time; vendored in Docker).
-ffmpeg-next = { version = "7", optional = true }
+ffmpeg-next = { version = "8", optional = true }
 
 # Model downloads.
 reqwest = { version = "0.13", features = ["stream", "rustls"], default-features = false, optional = true }
