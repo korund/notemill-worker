@@ -10,6 +10,8 @@
 //! defaulting to `./models`.
 
 mod catalog;
+mod download;
+mod hash;
 mod manager;
 mod registry;
 
