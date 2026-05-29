@@ -335,7 +335,7 @@ impl Manager {
         std::fs::create_dir_all(&self.dir)
             .map_err(|e| Error::Model(format!("create models dir: {e}")))?;
 
-        let (sha256, size_bytes) = add_download(url, &name, is_directory, &filename, &self.dir)?;
+        let sha256 = add_download(url, &name, is_directory, &filename, &self.dir)?;
 
         let entry = CatalogEntry {
             name: name.clone(),
@@ -343,7 +343,6 @@ impl Manager {
             filename,
             url: url.to_string(),
             sha256: Some(sha256),
-            size_bytes: Some(size_bytes),
             description: None,
             is_directory,
         };
@@ -389,7 +388,7 @@ fn add_download(
     _is_directory: bool,
     _filename: &str,
     _models_dir: &Path,
-) -> Result<(String, u64)> {
+) -> Result<String> {
     Err(Error::NotImplemented(
         "download: enable feature `download` to add models by URL",
     ))
@@ -402,7 +401,7 @@ fn add_download(
     is_directory: bool,
     filename: &str,
     models_dir: &Path,
-) -> Result<(String, u64)> {
+) -> Result<String> {
     let download_path = if is_directory {
         models_dir.join(format!("{filename}.tar.gz.part"))
     } else {
@@ -415,15 +414,11 @@ fn add_download(
         filename: filename.to_string(),
         url: url.to_string(),
         sha256: None,
-        size_bytes: None,
         description: None,
         is_directory: false, // download as a single file first
     };
     download_file(&tmp_entry, &download_path)?;
 
-    let size_bytes = std::fs::metadata(&download_path)
-        .map_err(|e| Error::Model(format!("stat {}: {e}", download_path.display())))?
-        .len();
     let sha256 = compute_sha256(&download_path)?;
 
     if is_directory {
@@ -443,7 +438,7 @@ fn add_download(
         let _ = std::fs::remove_file(&download_path);
     }
 
-    Ok((sha256, size_bytes))
+    Ok(sha256)
 }
 
 enum ShaCheck {
@@ -503,12 +498,7 @@ fn download_file(entry: &CatalogEntry, dest: &Path) -> Result<()> {
         .enable_all()
         .build()
         .map_err(|e| Error::Model(format!("tokio runtime: {e}")))?;
-    runtime.block_on(download_to_path(
-        &entry.name,
-        &entry.url,
-        entry.size_bytes,
-        dest,
-    ))
+    runtime.block_on(download_to_path(&entry.name, &entry.url, dest))
 }
 
 /// Download and extract a tar.gz model.
@@ -530,12 +520,7 @@ fn pull_archive(entry: &CatalogEntry, models_dir: &Path, dest_dir: &Path) -> Res
         .build()
         .map_err(|e| Error::Model(format!("tokio runtime: {e}")))?;
 
-    runtime.block_on(download_to_path(
-        &entry.name,
-        &entry.url,
-        entry.size_bytes,
-        &archive_tmp,
-    ))?;
+    runtime.block_on(download_to_path(&entry.name, &entry.url, &archive_tmp))?;
 
     if let ShaCheck::Mismatch { actual, expected } =
         verify_sha256(&archive_tmp, entry.sha256.as_deref())?
@@ -616,12 +601,7 @@ fn flatten_single_root(dir: &Path) -> Result<()> {
 }
 
 #[cfg(feature = "download")]
-async fn download_to_path(
-    label: &str,
-    url: &str,
-    expected_size: Option<u64>,
-    dest: &Path,
-) -> Result<()> {
+async fn download_to_path(label: &str, url: &str, dest: &Path) -> Result<()> {
     use futures_util::StreamExt;
     use indicatif::{ProgressBar, ProgressStyle};
     use tokio::io::AsyncWriteExt;
@@ -639,7 +619,7 @@ async fn download_to_path(
         .error_for_status()
         .map_err(|e| Error::Model(format!("GET {url}: {e}")))?;
 
-    let total = response.content_length().or(expected_size);
+    let total = response.content_length();
     let pb = match total {
         Some(len) => {
             let bar = ProgressBar::new(len);

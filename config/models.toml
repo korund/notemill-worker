@@ -9,7 +9,6 @@ family = "whisper"
 filename = "whisper-medium-q4_1.bin"
 url = "https://blob.handy.computer/whisper-medium-q4_1.bin"
 sha256 = "79283fc1f9fe12ca3248543fbd54b73292164d8df5a16e095e2bceeaaabddf57"
-size_bytes = 491_782_144
 description = "Whisper Medium (q4_1). Good accuracy, medium speed."
 is_directory = false
 
@@ -19,7 +18,6 @@ family = "parakeet"
 filename = "parakeet-tdt-0.6b-v3-int8"
 url = "https://blob.handy.computer/parakeet-v3-int8.tar.gz"
 sha256 = "43d37191602727524a7d8c6da0eef11c4ba24320f5b4730f1a2497befc2efa77"
-size_bytes = 478_150_656
 description = "Parakeet V3 (int8). 25 European languages incl. Russian."
 is_directory = true
 
@@ -29,7 +27,6 @@ family = "giga-am"
 filename = "giga-am-v3-int8"
 url = "https://blob.handy.computer/giga-am-v3-int8.tar.gz"
 sha256 = "d872462268430db140b69b72e0fc4b787b194c1dbe51b58de39444d55b6da45b"
-size_bytes = 158_334_976
 description = "GigaAM v3 (int8). Russian speech recognition."
 is_directory = true
 
