@@ -336,12 +336,12 @@ impl Config {
     /// Parse a Config from a YAML string, applying --set overrides. Used by `load_merged`
     /// and by tests that exercise the parser without touching the filesystem.
     pub fn from_str(yaml: &str, overrides: &[(String, String)]) -> Result<Self> {
-        let mut value: serde_yaml::Value =
-            serde_yaml::from_str(yaml).map_err(|e| Error::Config(format!("parse: {e}")))?;
+        let mut value: serde_yaml_ng::Value =
+            serde_yaml_ng::from_str(yaml).map_err(|e| Error::Config(format!("parse: {e}")))?;
         for (key, val_str) in overrides {
             set_dotted_key(&mut value, key, val_str)?;
         }
-        serde_yaml::from_value(value).map_err(|e| Error::Config(format!("parse: {e}")))
+        serde_yaml_ng::from_value(value).map_err(|e| Error::Config(format!("parse: {e}")))
     }
 
     /// Load config from YAML, then apply --set key=value overrides (dotted keys, YAML scalars).
@@ -357,33 +357,33 @@ impl Config {
                 Error::Config(format!("read {}: {e}", path.display()))
             }
         })?;
-        let mut value: serde_yaml::Value = serde_yaml::from_str(&raw)
+        let mut value: serde_yaml_ng::Value = serde_yaml_ng::from_str(&raw)
             .map_err(|e| Error::Config(format!("parse {}: {e}", path.display())))?;
         for (key, val_str) in overrides {
             set_dotted_key(&mut value, key, val_str)?;
         }
-        serde_yaml::from_value(value)
+        serde_yaml_ng::from_value(value)
             .map_err(|e| Error::Config(format!("parse {}: {e}", path.display())))
     }
 }
 
-fn set_dotted_key(root: &mut serde_yaml::Value, key: &str, val_str: &str) -> Result<()> {
-    let val: serde_yaml::Value = serde_yaml::from_str(val_str)
+fn set_dotted_key(root: &mut serde_yaml_ng::Value, key: &str, val_str: &str) -> Result<()> {
+    let val: serde_yaml_ng::Value = serde_yaml_ng::from_str(val_str)
         .map_err(|e| Error::Config(format!("--set {key}={val_str}: {e}")))?;
     let parts: Vec<&str> = key.split('.').collect();
     let mut cur = root;
     for part in &parts[..parts.len() - 1] {
         if !cur.is_mapping() {
-            *cur = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+            *cur = serde_yaml_ng::Value::Mapping(serde_yaml_ng::Mapping::new());
         }
-        let k = serde_yaml::Value::String((*part).to_string());
+        let k = serde_yaml_ng::Value::String((*part).to_string());
         cur = cur
             .as_mapping_mut()
             .unwrap()
             .entry(k)
-            .or_insert_with(|| serde_yaml::Value::Mapping(serde_yaml::Mapping::new()));
+            .or_insert_with(|| serde_yaml_ng::Value::Mapping(serde_yaml_ng::Mapping::new()));
     }
-    let last = serde_yaml::Value::String(parts.last().unwrap().to_string());
+    let last = serde_yaml_ng::Value::String(parts.last().unwrap().to_string());
     if let Some(m) = cur.as_mapping_mut() {
         m.insert(last, val);
     }

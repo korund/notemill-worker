@@ -31,7 +31,7 @@ impl LivesyncState {
     /// Load cached state. Returns None if the file is missing or unreadable.
     pub fn load() -> Option<Self> {
         let raw = std::fs::read_to_string(STATE_PATH).ok()?;
-        serde_yaml::from_str(&raw).ok()
+        serde_yaml_ng::from_str(&raw).ok()
     }
 
     /// Atomically save state to `.cache/livesync.yaml`.
@@ -41,7 +41,7 @@ impl LivesyncState {
             std::fs::create_dir_all(parent)
                 .map_err(|e| Error::Output(format!("mkdir {}: {e}", parent.display())))?;
         }
-        let raw = serde_yaml::to_string(self)
+        let raw = serde_yaml_ng::to_string(self)
             .map_err(|e| Error::Output(format!("serialize state: {e}")))?;
         let tmp = path.with_extension("yaml.tmp");
         std::fs::write(&tmp, raw)
