@@ -43,7 +43,7 @@ ort = { version = "2.0.0-rc.12", optional = true }
 ffmpeg-next = { version = "7", optional = true }
 
 # Model downloads.
-reqwest = { version = "0.12", features = ["stream", "rustls-tls"], default-features = false, optional = true }
+reqwest = { version = "0.13", features = ["stream", "rustls"], default-features = false, optional = true }
 futures-util = { version = "0.3", optional = true }
 indicatif = { version = "0.18", optional = true }
 tar = { version = "0.4", optional = true }
