@@ -248,13 +248,15 @@ Both have to be handled, and a single threshold cannot tell them apart. A semant
 
 **Consequence.** If a pull fails three times, the worker shuts down loudly. This is a case for a human to look at (wrong URL, network outage, disk full); silently looping on a broken pull would hide the problem.
 
-### 5.3. Model catalog is config-driven; the runnable set is owned by `transcribe-rs`
+### 5.3. Supported engines are an explicit set in code; the catalog is only data
 
-**Decision.** The worker ships a catalog (`config/models.toml`) listing a few known entries with their download URLs and family identifiers, and `admin models add` lets the operator register more without editing the binary. The set of *runnable* models is whatever `transcribe-rs` accepts.
+**Context.** `transcribe-rs` exposes each engine as its own type with its own constructor: Whisper loads from a single file, the ONNX models take a path plus a quantization, and the remote engine is a different async trait entirely. There is no "give me model X by name" entry point, and there cannot be a clean one - the engines genuinely differ in how they are built and fed. The unification the crate offers is at inference time (the `SpeechModel` trait), not at load time.
 
-**Why.** Maintaining a model registry is not the worker's job. `transcribe-rs` already decides which model families it supports (Whisper, Parakeet, GigaAM via ONNX). Reproducing that list inside the worker would only create a second source of truth that goes stale.
+**Decision.** The worker keeps two things apart. The *catalog* (`config/models.toml`) is pure data - names, URLs, sha256, family tags - config-driven and extendable at runtime via `admin models add`. The *set of supported families* is code: a `ModelFamily` enum and a `match` in `src/engine/` that maps each family to the right constructor. Adding a family is a code change; adding a model of an existing family is a config change.
 
-**Consequence.** The operator chooses a model based on the language they actually speak. There is no automatic language detection; the model is a config value.
+**Why.** Because no string-to-type factory exists upstream, something has to translate a config value like `family: canary` into a concrete engine type, and that translation can only live in the worker. It is a deliberate, irreducible adapter - not the stale duplication the older design feared. Each family also carries its own quirks (quantization, on-disk layout, extra constructor arguments), so bridging one is a conscious step, not a line inherited for free. Carrying every engine the crate can theoretically load would mean shipping code nobody here runs; a curated subset only carries what is actually used.
+
+**Consequence.** The runnable set is whatever the worker has explicitly bridged - today a subset of the whisper.cpp and ONNX engines, with the remote and server-based ones left out. The operator chooses a model by language; there is no automatic language detection. The `Transcriber` trait (§4.1) keeps this contained: the dispatch is the only place that touches `transcribe-rs`, so revisiting the engine set later does not ripple into the pipeline.
 
 ### 5.4. Silero VAD is a catalog entry; the Docker image bakes it in
 

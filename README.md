@@ -1,6 +1,6 @@
 # Notemill
 
-Dictating a voice note is faster than typing one, but a voice note is useless until it is searchable text. Notemill turns voice messages sent to a bot in a messenger, transcribes them, and delivers the markdown to the note-taking system.
+Dictating a voice note is faster than typing one, but a voice note is useless until it is searchable text. Notemill turns voice messages sent to a bot in a messenger, transcribes them, and delivers Markdown to the note-taking system.
 
 Voice notes are my last-mile solution for catching what I think on the go - notes for future-me, the raw material I come back to later. There are more thoughts than memory can hold, and things slip away if I do not catch them. For this to be useful, the transcription has to be good.
 
@@ -30,7 +30,7 @@ For "why exactly this way" see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 - It does not own the audio source. Producers (Telegram, web, file-drop, whatever) put jobs into the queue; the worker reads them. The worker has no idea what platform the audio came from.
 - It does not deliver any user-facing notification. After a job is done the worker writes a `NotifyResult` back into a result queue; the producer that originated the job picks it up and decides what to tell the user.
-- It does not pick a transcription model for you. The catalog of supported models is whatever [transcribe-rs](https://crates.io/crates/transcribe-rs) supports; you choose one in the config based on the language you actually speak.
+- It does not pick a transcription model for you. The worker wires a curated set of `transcribe-rs` engines (see Models); you choose one in the config based on the language you actually speak.
 - It does not manage Obsidian. CouchDB + LiveSync sit between the worker and the vault; the worker only writes Markdown documents to CouchDB.
 
 ## Why this shape
@@ -160,9 +160,20 @@ Most sink and model fields also have dedicated CLI flags (`--output`, `--target`
 
 ## Models
 
-The worker does not own a model registry. The set of *runnable* models is whatever [transcribe-rs](https://crates.io/crates/transcribe-rs) accepts (today: Whisper via whisper.cpp, Parakeet, and GigaAM via ONNX; the list grows upstream). The worker ships a catalog file (`config/models.toml`) that lists known entries with their download URLs; `admin models add` lets the operator register more without editing the binary.
+The worker supports a curated subset of the engines [transcribe-rs](https://github.com/cjpais/transcribe-rs) provides. Support is not automatic: each family has to be added to the worker in code, so the set grows with worker releases, not with upstream.
 
-Three behaviours worth knowing about:
+Supported today:
+
+- **whisper.cpp:** Whisper
+- **ONNX (int8):** Parakeet, GigaAM, SenseVoice, Canary, Cohere
+
+Not supported yet: Moonshine, Whisperfile, the remote (OpenAI API) engine.
+
+The worker ships a catalog file (`config/models.toml`) of known entries with their download URLs. To add another model of an already-supported family, run `admin models add <url> --family <family>`; it appends an entry to the catalog at runtime, with no rebuild.
+
+The family list is fixed in code, but within a family the model is not. The bundled catalog entries are a convenience, not a lock-in: you can point at your own copy instead - a different ONNX int8 export of a supported family, for example - as long as its on-disk layout matches what that family's loader expects (the same file names the bundled model uses). The catalog entry only says where to fetch the model and which family loads it.
+
+Three behaviors worth knowing about:
 
 - **Lazy load.** A model is loaded into memory only on the first job that needs it, not on startup. After an idle window (default 5 minutes, configured as `input.queue.model.unload_after_ms`) it is unloaded. This matches the actual load profile: short bursts of work separated by long idle periods.
 - **Background pull on the first start.** If a configured model is missing on disk, the worker spawns a background download instead of failing. The queue loop starts immediately. Jobs that arrive while a model is still pulling get NACKed back to the queue and naturally retry once the download finishes. If a pull fails three times, the worker shuts down with a loud error - this is a case for admin investigation.
@@ -189,7 +200,7 @@ The CouchDB sink keeps a small cache (`config/.cache/livesync.yaml`) of the vaul
 
 The queue contract is at-least-once with a visibility timeout. The worker treats this strictly:
 
-- Idempotency is the worker's job, not the queue's. Every job carries a `dedup_key`; a `ProcessedStore` records the outcome by key so a redelivered job is recognised and not re-transcribed.
+- Idempotency is the worker's job, not the queue's. Every job carries a `dedup_key`; a `ProcessedStore` records the outcome by key so a redelivered job is recognized and not re-transcribed.
 - On a transient failure (decode error, engine load error, etc.), the worker emits a delayed NACK. The queue re-delivers after the visibility timeout (default 300s). Retries are exponential.
 - After `max_receive` deliveries (default 5) the entry is moved to the dead-letter queue. `admin queue dlq` lists and re-queues entries; nothing is silently dropped.
 - A job whose audio contains no speech is not a failure. The pipeline produces an explicit `NoSpeech` result, the worker writes a `NotifyResult` back to the result queue with that status, and the producer can show a useful message to the user instead of silence.
