@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/korund/notemill-worker/compare/v0.2.0...v0.3.0) (2026-05-29)
+
+
+### Features
+
+* **models:** support SenseVoice, Canary and Cohere engines, expand catalog ([900f85d](https://github.com/korund/notemill-worker/commit/900f85d141806892c5bad67fed8f29b2e144b154))
+
+
+### Bug Fixes
+
+* **config:** materialize audio defaults when section omitted ([ad1ab53](https://github.com/korund/notemill-worker/commit/ad1ab5360ddc5e7debb81e2f4185ebcfebf1af24))
+
 ## [0.2.0](https://github.com/korund/notemill-worker/compare/v0.1.0...v0.2.0) (2026-05-21)
 
 
