@@ -15,12 +15,12 @@ full = ["engine-transcribe", "decode-ffmpeg", "download"]
 
 [dependencies]
 anyhow = "1"
-thiserror = "1"
+thiserror = "2"
 clap = { version = "4", features = ["derive", "env"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-toml = "0.8"
-sha2 = "0.10"
+toml = "1"
+sha2 = "0.11"
 hex = "0.4"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -45,7 +45,7 @@ ffmpeg-next = { version = "7", optional = true }
 # Model downloads.
 reqwest = { version = "0.12", features = ["stream", "rustls-tls"], default-features = false, optional = true }
 futures-util = { version = "0.3", optional = true }
-indicatif = { version = "0.17", optional = true }
+indicatif = { version = "0.18", optional = true }
 tar = { version = "0.4", optional = true }
 flate2 = { version = "1", optional = true }
 chrono = { version = "0.4.44", default-features = false, features = ["std", "serde"] }
