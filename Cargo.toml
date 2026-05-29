@@ -30,7 +30,7 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 ureq = { version = "2", features = ["json", "tls"] }
 base64 = "0.22"
 serde_yaml = "0.9"
-twox-hash = "1.6"
+twox-hash = "2"
 mime_guess = { version = "2", default-features = false, features = ["rev-mappings"] }
 
 # Engine (handy uses the same crate; CPU path on Linux).
