@@ -13,6 +13,42 @@ description = "Whisper Medium (q4_1). Good accuracy, medium speed."
 is_directory = false
 
 [[model.transcribe]]
+name = "whisper-small"
+family = "whisper"
+filename = "ggml-small.bin"
+url = "https://blob.handy.computer/ggml-small.bin"
+sha256 = "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b"
+description = "Whisper Small. Fast, lower accuracy."
+is_directory = false
+
+[[model.transcribe]]
+name = "whisper-turbo"
+family = "whisper"
+filename = "ggml-large-v3-turbo.bin"
+url = "https://blob.handy.computer/ggml-large-v3-turbo.bin"
+sha256 = "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69"
+description = "Whisper Large v3 Turbo. Fast, high accuracy."
+is_directory = false
+
+[[model.transcribe]]
+name = "whisper-large"
+family = "whisper"
+filename = "ggml-large-v3-q5_0.bin"
+url = "https://blob.handy.computer/ggml-large-v3-q5_0.bin"
+sha256 = "d75795ecff3f83b5faa89d1900604ad8c780abd5739fae406de19f23ecd98ad1"
+description = "Whisper Large v3 (q5_0). Best accuracy, slow."
+is_directory = false
+
+[[model.transcribe]]
+name = "breeze-asr"
+family = "whisper"
+filename = "breeze-asr-q5_k.bin"
+url = "https://blob.handy.computer/breeze-asr-q5_k.bin"
+sha256 = "8efbf0ce8a3f50fe332b7617da787fb81354b358c288b008d3bdef8359df64c6"
+description = "Breeze ASR (q5_k). Whisper-based, Mandarin/English."
+is_directory = false
+
+[[model.transcribe]]
 name = "parakeet-v3"
 family = "parakeet"
 filename = "parakeet-tdt-0.6b-v3-int8"
@@ -22,12 +58,57 @@ description = "Parakeet V3 (int8). 25 European languages incl. Russian."
 is_directory = true
 
 [[model.transcribe]]
+name = "parakeet-v2"
+family = "parakeet"
+filename = "parakeet-tdt-0.6b-v2-int8"
+url = "https://blob.handy.computer/parakeet-v2-int8.tar.gz"
+sha256 = "ac9b9429984dd565b25097337a887bb7f0f8ac393573661c651f0e7d31563991"
+description = "Parakeet V2 (int8). English."
+is_directory = true
+
+[[model.transcribe]]
 name = "gigaam-v3"
 family = "giga-am"
 filename = "giga-am-v3-int8"
 url = "https://blob.handy.computer/giga-am-v3-int8.tar.gz"
 sha256 = "d872462268430db140b69b72e0fc4b787b194c1dbe51b58de39444d55b6da45b"
 description = "GigaAM v3 (int8). Russian speech recognition."
+is_directory = true
+
+[[model.transcribe]]
+name = "sense-voice"
+family = "sense-voice"
+filename = "sense-voice-int8"
+url = "https://blob.handy.computer/sense-voice-int8.tar.gz"
+sha256 = "171d611fe5d353a50bbb741b6f3ef42559b1565685684e9aa888ef563ba3e8a4"
+description = "SenseVoice (int8). Multilingual: zh/en/ja/ko/yue."
+is_directory = true
+
+[[model.transcribe]]
+name = "canary-180m-flash"
+family = "canary"
+filename = "canary-180m-flash"
+url = "https://blob.handy.computer/canary-180m-flash.tar.gz"
+sha256 = "6d9cfca6118b296e196eaedc1c8fa9788305a7b0f1feafdb6dc91932ab6e53f7"
+description = "Canary 180M Flash (int8). en/de/es/fr."
+is_directory = true
+
+[[model.transcribe]]
+name = "canary-1b-v2"
+family = "canary"
+filename = "canary-1b-v2"
+url = "https://blob.handy.computer/canary-1b-v2.tar.gz"
+sha256 = "02305b2a25f9cf3e7deaffa7f94df00efa44f442cd55c101c2cb9c000f904666"
+description = "Canary 1B v2 (int8). 25 languages."
+is_directory = true
+
+[[model.transcribe]]
+name = "cohere-int8"
+family = "cohere"
+filename = "cohere-int8"
+url = "https://blob.handy.computer/cohere-int8.tar.gz"
+sha256 = "ea2257d52434f3644574f187dcdcf666e302cd11b92866116ab8e14cd9c887f0"
+description = "Cohere (int8)."
 is_directory = true
 
 # ---------- VAD models ----------

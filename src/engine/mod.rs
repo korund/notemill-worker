@@ -43,6 +43,30 @@ pub fn build(model: &ResolvedModel) -> Result<Box<dyn Transcriber>> {
                     .map_err(|e| Error::Engine(format!("gigaam load: {e}")))?;
                 Box::new(engine)
             }
+            ModelFamily::SenseVoice => {
+                let engine = transcribe_rs::onnx::sense_voice::SenseVoiceModel::load(
+                    &model.path,
+                    &transcribe_rs::onnx::Quantization::Int8,
+                )
+                .map_err(|e| Error::Engine(format!("sense_voice load: {e}")))?;
+                Box::new(engine)
+            }
+            ModelFamily::Canary => {
+                let engine = transcribe_rs::onnx::canary::CanaryModel::load(
+                    &model.path,
+                    &transcribe_rs::onnx::Quantization::Int8,
+                )
+                .map_err(|e| Error::Engine(format!("canary load: {e}")))?;
+                Box::new(engine)
+            }
+            ModelFamily::Cohere => {
+                let engine = transcribe_rs::onnx::cohere::CohereModel::load(
+                    &model.path,
+                    &transcribe_rs::onnx::Quantization::Int8,
+                )
+                .map_err(|e| Error::Engine(format!("cohere load: {e}")))?;
+                Box::new(engine)
+            }
         };
 
         Ok(Box::new(TranscribeRsAdapter { inner: boxed }))

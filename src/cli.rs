@@ -8,6 +8,9 @@ pub enum FamilyArg {
     Whisper,
     Parakeet,
     GigaAm,
+    SenseVoice,
+    Canary,
+    Cohere,
 }
 
 impl From<FamilyArg> for ModelFamily {
@@ -16,6 +19,9 @@ impl From<FamilyArg> for ModelFamily {
             FamilyArg::Whisper => ModelFamily::Whisper,
             FamilyArg::Parakeet => ModelFamily::Parakeet,
             FamilyArg::GigaAm => ModelFamily::GigaAm,
+            FamilyArg::SenseVoice => ModelFamily::SenseVoice,
+            FamilyArg::Canary => ModelFamily::Canary,
+            FamilyArg::Cohere => ModelFamily::Cohere,
         }
     }
 }

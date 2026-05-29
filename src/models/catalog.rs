@@ -36,6 +36,9 @@ pub enum ModelFamily {
     Whisper,
     Parakeet,
     GigaAm,
+    SenseVoice,
+    Canary,
+    Cohere,
 }
 
 /// Sectioned catalog file: `[[model.transcribe]]` and `[[model.vad]]`.
@@ -211,5 +214,54 @@ is_directory = false
         assert!(cat.find("silero-vad-v6").is_none()); // not in transcribe section
         assert!(cat.find_vad("silero-vad-v6").is_some());
         assert!(cat.find_vad("whisper-medium").is_none()); // not in vad section
+    }
+
+    #[test]
+    fn catalog_parses_new_onnx_families() {
+        let src = r#"
+[model]
+[[model.transcribe]]
+name = "sense-voice-int8"
+family = "sense-voice"
+filename = "sense-voice"
+url = "https://example.com/sense-voice.tar.gz"
+is_directory = true
+
+[[model.transcribe]]
+name = "canary-1b"
+family = "canary"
+filename = "canary"
+url = "https://example.com/canary.tar.gz"
+is_directory = true
+
+[[model.transcribe]]
+name = "cohere-int8"
+family = "cohere"
+filename = "cohere"
+url = "https://example.com/cohere.tar.gz"
+is_directory = true
+"#;
+        let (transcribe, _vad) = Catalog::parse_toml(src, "test").unwrap();
+        assert_eq!(transcribe.len(), 3);
+        assert!(matches!(transcribe[0].family, Some(ModelFamily::SenseVoice)));
+        assert!(matches!(transcribe[1].family, Some(ModelFamily::Canary)));
+        assert!(matches!(transcribe[2].family, Some(ModelFamily::Cohere)));
+    }
+
+    #[test]
+    fn embedded_catalog_parses_with_all_families() {
+        let (transcribe, vad) = Catalog::parse_toml(EMBEDDED, "embedded").unwrap();
+        assert!(!transcribe.is_empty() && !vad.is_empty());
+        assert!(transcribe.iter().all(|e| e.family.is_some()));
+        let cat = Catalog::from_parts(transcribe, vad);
+        for name in [
+            "whisper-small",
+            "parakeet-v2",
+            "sense-voice",
+            "canary-1b-v2",
+            "cohere-int8",
+        ] {
+            assert!(cat.find(name).is_some(), "missing transcribe model: {name}");
+        }
     }
 }
