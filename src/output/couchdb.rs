@@ -45,17 +45,15 @@ pub fn probe(
     let db_url = format!("{}/{}", base, cfg.database);
     let auth = basic_auth(&cfg.username, password);
 
-    let agent = ureq::AgentBuilder::new()
-        .timeout(std::time::Duration::from_secs(PROBE_TIMEOUT_SECS))
-        .build();
+    let agent = ureq::Agent::new_with_config(ureq::Agent::config_builder().timeout_global(Some(std::time::Duration::from_secs(PROBE_TIMEOUT_SECS))).build());
 
     let info: serde_json::Value = agent
         .get(&db_url)
-        .set("Authorization", &auth)
-        .set("Accept", "application/json")
+        .header("Authorization", &auth)
+        .header("Accept", "application/json")
         .call()
         .map_err(|e| Error::Output(format!("couchdb db info: {e}")))?
-        .into_json()
+        .body_mut().read_json()
         .map_err(|e| Error::Output(format!("couchdb db info parse: {e}")))?;
 
     let doc_count = info
@@ -67,11 +65,11 @@ pub fn probe(
         .get(&format!("{}/_all_docs", db_url))
         .query("include_docs", "true")
         .query("limit", &limit.to_string())
-        .set("Authorization", &auth)
-        .set("Accept", "application/json")
+        .header("Authorization", &auth)
+        .header("Accept", "application/json")
         .call()
         .map_err(|e| Error::Output(format!("couchdb _all_docs: {e}")))?
-        .into_json()
+        .body_mut().read_json()
         .map_err(|e| Error::Output(format!("couchdb _all_docs parse: {e}")))?;
 
     let samples: Vec<serde_json::Value> = resp
@@ -140,11 +138,11 @@ fn fetch_chunks(
         let url = format!("{}/{}", db_url, encode_id(&id));
         let doc: serde_json::Value = agent
             .get(&url)
-            .set("Authorization", auth)
-            .set("Accept", "application/json")
+            .header("Authorization", auth)
+            .header("Accept", "application/json")
             .call()
             .map_err(|e| Error::Output(format!("couchdb get {id}: {e}")))?
-            .into_json()
+            .body_mut().read_json()
             .map_err(|e| Error::Output(format!("couchdb get {id} parse: {e}")))?;
         out.push(doc);
     }
@@ -186,9 +184,7 @@ pub fn write_note(
     let db_url = format!("{}/{}", base, cfg.database);
     let auth = basic_auth(&cfg.username, password);
 
-    let agent = ureq::AgentBuilder::new()
-        .timeout(std::time::Duration::from_secs(HTTP_TIMEOUT_SECS))
-        .build();
+    let agent = ureq::Agent::new_with_config(ureq::Agent::config_builder().timeout_global(Some(std::time::Duration::from_secs(HTTP_TIMEOUT_SECS))).build());
 
     let chunk_id = chunk_id_for(text);
     put_chunk_if_absent(&agent, &db_url, &auth, &chunk_id, text)?;
@@ -250,12 +246,12 @@ fn put_chunk_if_absent(
     let url = format!("{}/{}", db_url, encode_id(id));
     let resp = agent
         .put(&url)
-        .set("Authorization", auth)
-        .set("Content-Type", "application/json")
+        .header("Authorization", auth)
+        .header("Content-Type", "application/json")
         .send_json(body);
     match resp {
         Ok(_) => Ok(()),
-        Err(ureq::Error::Status(409, _)) => Ok(()), // chunk already exists -- dedup hit
+        Err(ureq::Error::StatusCode(409)) => Ok(()), // chunk already exists -- dedup hit
         Err(e) => Err(Error::Output(format!("couchdb put chunk {id}: {e}"))),
     }
 }
@@ -273,18 +269,18 @@ fn put_main(
             // Refresh _rev on conflict.
             match agent
                 .get(&url)
-                .set("Authorization", auth)
+                .header("Authorization", auth)
                 .call()
             {
-                Ok(r) => {
+                Ok(mut r) => {
                     let existing: serde_json::Value = r
-                        .into_json()
+                        .body_mut().read_json()
                         .map_err(|e| Error::Output(format!("couchdb get main parse: {e}")))?;
                     if let Some(rev) = existing.get("_rev").and_then(|v| v.as_str()) {
                         body["_rev"] = serde_json::Value::String(rev.to_string());
                     }
                 }
-                Err(ureq::Error::Status(404, _)) => {
+                Err(ureq::Error::StatusCode(404)) => {
                     body.as_object_mut().map(|o| o.remove("_rev"));
                 }
                 Err(e) => return Err(Error::Output(format!("couchdb get main {id}: {e}"))),
@@ -292,12 +288,12 @@ fn put_main(
         }
         let resp = agent
             .put(&url)
-            .set("Authorization", auth)
-            .set("Content-Type", "application/json")
+            .header("Authorization", auth)
+            .header("Content-Type", "application/json")
             .send_json(body.clone());
         match resp {
             Ok(_) => return Ok(()),
-            Err(ureq::Error::Status(409, _)) => continue,
+            Err(ureq::Error::StatusCode(409)) => continue,
             Err(e) => return Err(Error::Output(format!("couchdb put main {id}: {e}"))),
         }
     }
@@ -320,13 +316,11 @@ pub fn doc_exists(cfg: &CouchdbConfig, password: &str, doc_id: &str) -> Result<b
     let base = cfg.url.trim_end_matches('/');
     let db_url = format!("{}/{}", base, cfg.database);
     let auth = basic_auth(&cfg.username, password);
-    let agent = ureq::AgentBuilder::new()
-        .timeout(std::time::Duration::from_secs(HTTP_TIMEOUT_SECS))
-        .build();
+    let agent = ureq::Agent::new_with_config(ureq::Agent::config_builder().timeout_global(Some(std::time::Duration::from_secs(HTTP_TIMEOUT_SECS))).build());
     let url = format!("{}/{}", db_url, encode_id(doc_id));
-    match agent.head(&url).set("Authorization", &auth).call() {
+    match agent.head(&url).header("Authorization", &auth).call() {
         Ok(_) => Ok(true),
-        Err(ureq::Error::Status(404, _)) => Ok(false),
+        Err(ureq::Error::StatusCode(404)) => Ok(false),
         Err(e) => Err(Error::Output(format!("couchdb head {doc_id}: {e}"))),
     }
 }
